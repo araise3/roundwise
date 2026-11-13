@@ -11,8 +11,8 @@
     // Shown in the header and in the required "not endorsed" notice. Rename freely
     // (but not to anything containing "GRID" or "Riot Open Access" - ToS 9.4).
     "SITE_NAME": "Roundwise",
-    // Earliest match date to import. Earlier = more history, more D1 writes.
-    "BACKFILL_FROM": "2025-01-01T00:00:00Z",
+    // Earliest match date to import. Which tournaments are imported is set in src/ingest/scope.ts.
+    "BACKFILL_FROM": "2026-01-01T00:00:00Z",
     // Series fetched from the Series State API per 10-minute cron run.
     // ~100 D1 rows are written per series; D1 free tier allows 100k rows written/day.
     "BATCH_SIZE": "6",

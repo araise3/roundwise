@@ -11,6 +11,7 @@ import type { ListSeriesData, SeriesStateData } from "../grid/types";
 import { PLAYER_SUM_COLS, sumSelect, TEAM_SUM_COLS } from "../stats/columns";
 import { PERIODS, periodCutoff } from "../stats/periods";
 import { getMeta, insertRow, runBatched, setMeta } from "./db";
+import { inScope } from "./scope";
 import { transformSeries } from "./transform";
 
 const HOUR = 3600_000;
@@ -65,6 +66,7 @@ async function discover(env: Env, now: Date): Promise<number> {
     for (const { node } of data.allSeries.edges) {
       if (node.startTimeScheduled > latest) latest = node.startTimeScheduled;
       if (node.type !== "ESPORTS" || node.teams.length !== 2) continue;
+      if (!inScope(node.tournament?.name, node.startTimeScheduled)) continue;
       const [a, b] = node.teams.map((t) => t.baseInfo);
       for (const t of [a, b]) {
         stmts.push(env.DB.prepare(
