@@ -1,6 +1,6 @@
 # Roundwise
 
-Round-level VALORANT esports analytics on GRID Riot Open Access data.
+Round-level VALORANT esports analytics on GRID Riot Open Access data, covering tier 1 (VCT) and tier 2 (VCL / Challengers) from 2026.
 Cloudflare Worker (Hono + React SSR) + D1 + a 10-minute cron importer.
 
 It focuses on what scoreboard sites don't show:
@@ -56,7 +56,8 @@ Keep migrations backward-compatible with the currently deployed code (add column
 
 The cron starts importing immediately. Tuning lives in `wrangler.jsonc` → `vars`:
 
-- `BACKFILL_FROM`: earliest match date to import.
+- `BACKFILL_FROM`: earliest match date to import. Which tournaments are imported (VCT, Masters, Champions, LCQs,
+  Challengers/VCL; not Game Changers or open qualifiers) is defined in `src/ingest/scope.ts`.
 - `BATCH_SIZE`: matches fetched per 10-minute run. Each match writes ~100 D1 rows; the
   D1 free tier allows 100k rows written/day, so the default (6 → ~860 matches/day) stays under it.
   On the Workers paid plan you can raise this a lot.

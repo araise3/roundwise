@@ -34,7 +34,8 @@ If the shell's `CLOUDFLARE_API_TOKEN` lacks Workers permissions, deploy with the
 ```
 src/index.tsx     Hono routes; render() SSRs one page component and embeds its props for hydration; cron handler
 src/grid/         GRID GraphQL documents, response types, client
-src/ingest/       run.ts (discovery + batch import), transform.ts (pure GRID -> row transform), db.ts
+src/ingest/       run.ts (discovery + batch import), transform.ts (pure GRID -> row transform), db.ts,
+                  scope.ts (which tournaments are imported: VCT + VCL/Challengers only; no Game Changers or open quals)
 src/stats/        columns.ts (stored count columns), metrics.ts (metric registry: SQL + definitions),
                   periods.ts (90d / 12m / all), queries.ts (page queries)
 src/web/          React UI shared by server and browser: app.tsx (page registry), pages/, components/,
