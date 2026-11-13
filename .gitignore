@@ -7,3 +7,4 @@ public/app.css
 public/fonts/
 public/js/
 .legacy-ui/
+.liquipedia-cache.json

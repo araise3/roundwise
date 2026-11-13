@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { candidateTitles, ownFiles, pickLogoFiles } from "../src/ingest/liquipedia";
+import { candidateTitles, fileStem, infoboxImages, ownFiles, pickLogoFiles } from "../src/ingest/liquipedia";
 
 const f = (name: string, timestamp: string) => ({ name: `File:${name}`, timestamp });
 
@@ -34,5 +34,29 @@ describe("Liquipedia logo picking", () => {
   it("tries GRID names without numbered suffixes", () => {
     expect(candidateTitles("Evil Geniuses (1)")).toEqual(["Evil Geniuses (1)", "Evil Geniuses"]);
     expect(candidateTitles("Howlers ")).toEqual(["Howlers"]);
+  });
+});
+
+describe("Liquipedia infobox aliases", () => {
+  it("reads image/imagedark from the team infobox", () => {
+    const wt = [
+      "{{Infobox team", "|name=FUT Esports", "|image=Futbolist 2021 lightmode.png", "|imagedark=Futbolist 2021 darkmode.png",
+      "|location=Turkey", "}}",
+    ].join("\n");
+    expect(infoboxImages(wt)).toEqual({ image: "Futbolist 2021 lightmode.png", imagedark: "Futbolist 2021 darkmode.png" });
+  });
+
+  it("turns a logo file into a name alias", () => {
+    expect(fileStem("Futbolist 2021 lightmode.png")).toBe("Futbolist");
+    expect(fileStem("Team Vitality 2026 full allmode.png")).toBe("Team Vitality");
+    expect(fileStem("photo.jpg")).toBeNull();
+  });
+
+  it("finds icons filed under a former name via the infobox alias", () => {
+    const pick = pickLogoFiles("FUT Esports", [
+      { name: "Futbolist 2021 lightmode.png", timestamp: "2023-01-01" },
+      { name: "Futbolist 2021 darkmode.png", timestamp: "2023-01-01" },
+    ], ["Futbolist"]);
+    expect(pick).toEqual({ title: "FUT Esports", light: "Futbolist 2021 lightmode.png", dark: "Futbolist 2021 darkmode.png" });
   });
 });

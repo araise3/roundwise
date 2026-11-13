@@ -36,9 +36,17 @@ to both the `db:migrate:local` and `dev` commands.
 
 Team logos are resized with the Cloudflare Images binding. Local mode can't produce the raw pixels used for the
 contrast check, so `wrangler.jsonc` marks the binding `remote: true`: `wrangler dev` calls the real service and needs
-`npx wrangler login`. Logos are processed by the cron: 5 teams per run with Liquipedia, 10 per run from GRID only.
-For Liquipedia lookups, add `LIQUIPEDIA_CONTACT=<email>` to `.dev.vars` (production: `wrangler secret put LIQUIPEDIA_CONTACT`);
-it goes into the User-Agent as Liquipedia's API terms require. Without it, only GRID's logos are used.
+`npx wrangler login`. The cron fills in GRID's logo (10 teams per run) for teams that have none.
+
+Liquipedia's light/dark team icons are loaded by hand, from one machine as their API terms ask:
+
+```bash
+node scripts/import-logos.mjs            # remote D1; --local --persist-to DIR, --dry-run, --force, --only ids
+```
+
+It needs `LIQUIPEDIA_CONTACT=<email>` in `.dev.vars` (sent in the User-Agent), keeps at least 2 s between requests,
+caches every response in `.liquipedia-cache.json` (gitignored) and prints the teams it found no logo for. Re-run it
+when new teams appear; teams with a Liquipedia logo are skipped unless `--force`.
 
 UI: React 19 + shadcn/ui (Tailwind v4), server-rendered in the Worker with `react-dom/server` and hydrated in the browser
 (`src/client/main.tsx`). Each route renders one page component from `src/web/app.tsx` and embeds that page's props for hydration;
@@ -99,9 +107,9 @@ series GRID split in two are merged, and series scores are corrected. Challenger
       Only use third-party AI tools on the data under a paid business/enterprise plan with training disabled (8.2).
 - [ ] Never commit `.dev.vars` / `.env` or expose the key (3.3). Both are in `.gitignore`.
 - [ ] Team logos: shown by the site owner's decision (Nov 2026) although ToS 9.3 grants no rights to team marks.
-      They come from Liquipedia (separate light/dark icons; API terms: User-Agent with contact, ≤1 request per 2 s)
-      with GRID's `Team.logoUrl` as the fallback, are downloaded once at import and served from this Worker (never
-      hotlinked). Remove them if GRID, Liquipedia or a team objects. No Riot art is used; agents and maps are text only.
+      They come from Liquipedia (separate light/dark icons, loaded by `scripts/import-logos.mjs`; credited in the
+      footer) with GRID's `Team.logoUrl` as the fallback, are stored in D1 and served from this Worker (never hotlinked).
+      Remove them if GRID, Liquipedia or a team objects. No Riot art is used; agents and maps are text only.
 - [ ] If GRID asks you to correct or remove player information, do it promptly (10.3).
 - [ ] vlr.gg stats (Rating, ACS, KAST, clutches, economy, vetoes) are credited on the About page and in every metric
       definition. They are not GRID data, so GRID's licence doesn't cover them; remove them if vlr.gg objects.

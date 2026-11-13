@@ -169,7 +169,7 @@ app.get("/logo/:id/:mode{light|dark}", async (c) => {
   if (!row) return c.notFound();
   if (row.img) {
     const res = new Response(new Uint8Array(row.img as ArrayLike<number>), {
-      headers: { "content-type": "image/png", "cache-control": "public, max-age=86400, stale-while-revalidate=604800" },
+      headers: { "content-type": "image/png", "cache-control": "public, max-age=3600, stale-while-revalidate=86400" },
     });
     c.executionCtx.waitUntil(cache.put(c.req.raw, res.clone()));
     return res;

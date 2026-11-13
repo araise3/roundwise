@@ -42,7 +42,8 @@ src/web/          React UI shared by server and browser: app.tsx (page registry)
                   components/ui (shadcn), lib/, app.css (Tailwind v4 + theme tokens)
 src/client/       browser entry that hydrates the page (bundled to public/js)
 migrations/       D1 schema (SQL)
-scripts/          import-vlr.mjs (vlr.gg stats for VCT, see below), layout-audit.js, local helpers
+scripts/          import-vlr.mjs (vlr.gg stats for VCT, see below), import-logos.mjs (Liquipedia team logos),
+                  layout-audit.js, local helpers
 test/             synthetic-data tests
 .legacy-ui/       old UI, gitignored; do not edit
 ```
@@ -82,10 +83,11 @@ leaderboard sort, and the About page's definitions. To add one:
 - Keep the GRID attribution, not-endorsed notice, and Riot legal notice in the footer.
 - `SITE_NAME` must not contain or resemble "GRID" or "Riot Open Access".
 - No Riot art; agents and maps are text only. Team logos are shown by the owner's decision although ToS 9.3 grants no
-  rights to team marks. Sources: Liquipedia light/dark icons (`src/ingest/liquipedia.ts`; User-Agent with the
-  `LIQUIPEDIA_CONTACT` secret, ≥2 s between requests, one cron run at a time via the `logo_lock` meta row, exponential
-  backoff 2→30 min after a 429; credited in the footer as CC BY-SA), falling back
-  to GRID's `Team.logoUrl`. Processed by `src/ingest/logos.ts`, stored in D1, never hotlinked.
+  rights to team marks. Sources: Liquipedia light/dark icons, loaded only by `scripts/import-logos.mjs` run by hand
+  from one machine (Liquipedia's API terms: one IP, User-Agent with `LIQUIPEDIA_CONTACT`, ≥2 s between requests,
+  cache results; credited in the footer as CC BY-SA). Never call Liquipedia from the Worker. The cron
+  (`src/ingest/logos.ts`) only fills in GRID's `Team.logoUrl` for teams without a logo and never overwrites
+  `logo_source = 'liquipedia'`. Stored in D1, never hotlinked.
 - No betting, odds, fantasy, or prediction-market features or links; no paywalls.
 - GRID's Open Access tier has no economy, trades, clutches, kill timelines, heatmaps or live data. For VCT matches,
   economy, KAST and clutches come from vlr.gg (above), credited as such; Challengers matches have none of them.

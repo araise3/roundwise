@@ -81,7 +81,7 @@ async function discover(env: Env, now: Date): Promise<number> {
           `INSERT INTO teams (id, name, short_name, color, logo_url) VALUES (?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET name = excluded.name, short_name = excluded.short_name, color = excluded.color,
              logo_url = excluded.logo_url,
-             logo_status = CASE WHEN teams.logo_url IS excluded.logo_url THEN teams.logo_status ELSE NULL END`,
+             logo_status = CASE WHEN teams.logo_url IS excluded.logo_url OR teams.logo_source = 'liquipedia' THEN teams.logo_status ELSE NULL END`,
         ).bind(t.id, t.name, t.nameShortened ?? null, t.colorPrimary ?? null, t.logoUrl ?? null));
       }
       if (node.tournament) {

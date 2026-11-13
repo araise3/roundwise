@@ -128,8 +128,8 @@ export const MetricKV = ({ m, r }: { m: Metric; r: Row | null }) => <KV label={m
  */
 export const TeamBadge = ({ id, size = "sm" }: { id: string; size?: "sm" | "lg" }) => (
   <span aria-hidden="true" className={cn("inline-flex shrink-0 overflow-hidden rounded-md align-middle", size === "lg" ? "size-8" : "size-5")}>
-    <img src={`/logo/${id}/light`} alt="" width={96} height={96} loading="lazy" decoding="async" className="size-full object-contain dark:hidden" />
-    <img src={`/logo/${id}/dark`} alt="" width={96} height={96} loading="lazy" decoding="async" className="hidden size-full object-contain dark:block" />
+    <img src={`/logo/${id}/light?v=2`} alt="" width={96} height={96} loading="lazy" decoding="async" className="size-full object-contain dark:hidden" />
+    <img src={`/logo/${id}/dark?v=2`} alt="" width={96} height={96} loading="lazy" decoding="async" className="hidden size-full object-contain dark:block" />
   </span>
 );
 
