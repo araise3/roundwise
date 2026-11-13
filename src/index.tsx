@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { renderToString } from "react-dom/server";
 import { App, type PageName, type PageProps, type Payload } from "@/app";
 import { THEME_SCRIPT } from "@/components/mode-toggle";
+import { initials } from "@/lib/format";
 import { runIngest } from "./ingest/run";
 import { parsePeriod, periodCutoff } from "./stats/periods";
 import * as Q from "./stats/queries";
@@ -44,10 +45,10 @@ app.get("/", async (c) => {
   const db = c.env.DB;
   const [recent, fkTeams, retakeTeams, kasPlayers, survPlayers, status] = await Promise.all([
     Q.recentSeries(db, 8),
-    Q.leaderboard(db, "teams", "90d", "fk_conv", "desc", 8),
-    Q.leaderboard(db, "teams", "90d", "retake", "desc", 8),
-    Q.leaderboard(db, "players", "90d", "kas", "desc", 300),
-    Q.leaderboard(db, "players", "90d", "surv", "desc", 300),
+    Q.leaderboard(db, "teams", "all", "fk_conv", "desc", 8),
+    Q.leaderboard(db, "teams", "all", "retake", "desc", 8),
+    Q.leaderboard(db, "players", "all", "kas", "desc", 300),
+    Q.leaderboard(db, "players", "all", "surv", "desc", 300),
     Q.ingestStatus(db),
   ]);
   const top = (r: Q.Row[]) => r.slice(0, 5);
@@ -155,6 +156,31 @@ app.get("/search", async (c) => {
   const term = (q(c, "q") ?? "").trim().slice(0, 60);
   const res = term.length >= 2 ? await Q.search(c.env.DB, term) : { teams: [], players: [] };
   return render(c, "search", { q: term, teams: res.teams, players: res.players }, { title: "Search" });
+});
+
+/** Team logo for one colour mode (PNG made at import), or an initials tile when the team has none. */
+app.get("/logo/:id/:mode{light|dark}", async (c) => {
+  const cache = (caches as unknown as { default: Cache }).default;
+  const hit = await cache.match(c.req.raw);
+  if (hit) return hit;
+  const mode = c.req.param("mode") as "light" | "dark";
+  const row = await c.env.DB.prepare(`SELECT name, logo_${mode} AS img FROM teams WHERE id = ?`).bind(c.req.param("id"))
+    .first<{ name: string; img: number[] | ArrayBuffer | null }>();
+  if (!row) return c.notFound();
+  if (row.img) {
+    const res = new Response(new Uint8Array(row.img as ArrayLike<number>), {
+      headers: { "content-type": "image/png", "cache-control": "public, max-age=86400, stale-while-revalidate=604800" },
+    });
+    c.executionCtx.waitUntil(cache.put(c.req.raw, res.clone()));
+    return res;
+  }
+  // Initials tile. Not edge-cached and only briefly browser-cached: the logo may be processed minutes later.
+  const [bg, fg] = mode === "dark" ? ["#262626", "#fafafa"] : ["#f5f5f5", "#171717"];
+  const text = esc(initials(row.name));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" rx="16" fill="${bg}"/>` +
+    `<text x="48" y="50" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-family="ui-monospace,Menlo,Consolas,monospace" ` +
+    `font-weight="600" font-size="${text.length > 2 ? 30 : 38}">${text}</text></svg>`;
+  return new Response(svg, { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=300" } });
 });
 
 app.get("/about", (c) => render(c, "about", { siteName: c.env.SITE_NAME }, { title: "About", active: "/about" }));

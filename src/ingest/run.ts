@@ -11,6 +11,7 @@ import type { ListSeriesData, SeriesStateData } from "../grid/types";
 import { PLAYER_SUM_COLS, sumSelect, TEAM_SUM_COLS } from "../stats/columns";
 import { PERIODS, periodCutoff } from "../stats/periods";
 import { getMeta, insertRow, runBatched, setMeta } from "./db";
+import { refreshLogos } from "./logos";
 import { inScope } from "./scope";
 import { transformSeries } from "./transform";
 
@@ -19,6 +20,7 @@ const DAY = 24 * HOUR;
 // 50 series per page. Discovery pages + BATCH_SIZE state calls (~4 subrequests per series incl. D1)
 // must stay under the per-run subrequest limit (1000 on Workers Paid, 50 on free).
 const MAX_DISCOVERY_PAGES = 10;
+const AGG_MIN_GAP = 10 * 60_000; // newly stored matches show on leaderboards within ~10 min
 const RESCAN_WINDOW = 2 * DAY; // keep re-reading recent days so reschedules are picked up
 
 export interface IngestReport {
@@ -29,10 +31,11 @@ export interface IngestReport {
   skipped: number;
   rateLimited: boolean;
   aggregated: boolean;
+  logos: number;
 }
 
 export async function runIngest(env: Env, now = new Date()): Promise<IngestReport> {
-  const report: IngestReport = { discovered: 0, processed: 0, stored: 0, retried: 0, skipped: 0, rateLimited: false, aggregated: false };
+  const report: IngestReport = { discovered: 0, processed: 0, stored: 0, retried: 0, skipped: 0, rateLimited: false, aggregated: false, logos: 0 };
   try {
     report.discovered = await discover(env, now);
     await processBatch(env, now, report);
@@ -40,9 +43,14 @@ export async function runIngest(env: Env, now = new Date()): Promise<IngestRepor
     if (e instanceof RateLimitedError) report.rateLimited = true;
     else throw e;
   }
+  if (!report.rateLimited) report.logos = await refreshLogos(env, now);
+  // Rebuild aggregates every AGG_EVERY_HOURS, and within AGG_MIN_GAP after new matches were stored.
+  if (report.stored > 0) await setMeta(env.DB, "agg_dirty", now.toISOString()).run();
   const last = await getMeta(env.DB, "agg_built_at");
+  const dirty = await getMeta(env.DB, "agg_dirty");
+  const age = last ? now.getTime() - Date.parse(last) : Infinity;
   const every = Number(env.AGG_EVERY_HOURS || "6") * HOUR;
-  if (!last || now.getTime() - Date.parse(last) >= every) {
+  if (age >= every || (dirty && age >= AGG_MIN_GAP)) {
     await refreshAggregates(env.DB, now);
     report.aggregated = true;
   }
@@ -70,9 +78,11 @@ async function discover(env: Env, now: Date): Promise<number> {
       const [a, b] = node.teams.map((t) => t.baseInfo);
       for (const t of [a, b]) {
         stmts.push(env.DB.prepare(
-          `INSERT INTO teams (id, name, short_name, color) VALUES (?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET name = excluded.name, short_name = excluded.short_name, color = excluded.color`,
-        ).bind(t.id, t.name, t.nameShortened ?? null, t.colorPrimary ?? null));
+          `INSERT INTO teams (id, name, short_name, color, logo_url) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET name = excluded.name, short_name = excluded.short_name, color = excluded.color,
+             logo_url = excluded.logo_url,
+             logo_status = CASE WHEN teams.logo_url IS excluded.logo_url THEN teams.logo_status ELSE NULL END`,
+        ).bind(t.id, t.name, t.nameShortened ?? null, t.colorPrimary ?? null, t.logoUrl ?? null));
       }
       if (node.tournament) {
         stmts.push(env.DB.prepare(
@@ -248,6 +258,6 @@ export async function refreshAggregates(db: D1Database, now = new Date()) {
       ).bind(period, cutoff),
     );
   }
-  stmts.push(setMeta(db, "agg_built_at", now.toISOString()));
+  stmts.push(setMeta(db, "agg_built_at", now.toISOString()), db.prepare("DELETE FROM meta WHERE key = 'agg_dirty'"));
   await db.batch(stmts);
 }

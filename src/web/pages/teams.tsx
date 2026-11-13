@@ -18,7 +18,7 @@ const PM = byKey(PLAYER_METRICS);
 
 export function TeamList({ rows, period, q }: { rows: Row[]; period: Period; q: string }) {
   const cols: Col[] = [
-    { key: "name", label: "Team", render: (r) => <span className="inline-flex items-center gap-2"><TeamBadge name={r.name} /><TeamLink id={r.team_id} name={r.name} /></span> },
+    { key: "name", label: "Team", render: (r) => <span className="inline-flex items-center gap-2"><TeamBadge id={r.team_id} /><TeamLink id={r.team_id} name={r.name} /></span> },
     { key: "maps", label: "Maps", num: true },
     ...[TM.map_wr, TM.atk_rw, TM.def_rw, TM.pistol_wr, TM.postplant, TM.retake, TM.fk_conv].map((m) => metricCol(m)),
   ];
@@ -77,7 +77,7 @@ export function TeamPage({ d, period }: { d: TeamPageData; period: Period }) {
     <>
       <PageHeader
         crumbs={[["Teams", "/teams"], d.team.name]}
-        title={<span className="inline-flex items-center gap-2.5"><TeamBadge name={d.team.name} side="a" />{d.team.name}</span>}
+        title={<span className="inline-flex items-center gap-2.5"><TeamBadge id={d.team.id} size="lg" />{d.team.name}</span>}
         meta={hasData ? [`${s.map_wins}W ${s.maps - s.map_wins}L`, `${s.maps} maps`, `${s.rounds} rounds`] : ["No maps in this period"]}
         aside={<>
           <PeriodTabs path={`/team/${d.team.id}`} period={period} params={{}} />
@@ -172,7 +172,7 @@ export function ComparePage({ teams, a, b, sa, sb, period }: {
       </form>
       {ready ? (
         <Section title="Head to head" description={`${a.name} vs ${b.name} · higher value is bold`} flush>
-          <CompareTable a={a.name} b={b.name} rows={[
+          <CompareTable a={{ id: a.id, name: a.name }} b={{ id: b.id, name: b.name }} rows={[
             ...VS_METRICS.map((m) => ({ label: m.label, a: sa[m.key], b: sb[m.key], f: m.fmt, desc: m.desc })),
             { label: "Comebacks (from −5)", a: sa.comebacks, b: sb.comebacks, f: "int" as const },
             { label: "Blown leads (from +5)", a: sa.blown_leads, b: sb.blown_leads, f: "int" as const },

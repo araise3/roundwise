@@ -6,7 +6,7 @@ export interface SeriesNode {
   type: string;
   format: { nameShortened: string } | null;
   tournament: { id: string; name: string; nameShortened: string | null } | null;
-  teams: { baseInfo: { id: string; name: string; nameShortened: string | null; colorPrimary: string | null } }[];
+  teams: { baseInfo: { id: string; name: string; nameShortened: string | null; colorPrimary: string | null; logoUrl: string | null } }[];
 }
 
 export interface ListSeriesData {

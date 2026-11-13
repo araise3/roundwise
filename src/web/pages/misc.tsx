@@ -25,7 +25,7 @@ export interface HomeProps {
 
 function Leaders({ title, rows, m, kind }: { title: string; rows: Row[]; m: Metric; kind: "team" | "player" }) {
   return (
-    <Section title={<Hint text={m.desc}>{title}</Hint>} description="Last 90 days"
+    <Section title={<Hint text={m.desc}>{title}</Hint>} description="All matches"
       action={<Button asChild variant="ghost" size="sm"><a href={`/leaderboards?kind=${kind}s&sort=${m.key}`}>All<ArrowRight /></a></Button>} flush>
       {rows.length ? (
         <ol className="text-sm">

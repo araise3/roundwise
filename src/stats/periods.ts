@@ -6,7 +6,7 @@ export const PERIOD_LABEL: Record<Period, string> = { "90d": "Last 90 days", "1y
 const DAYS: Record<Period, number | null> = { "90d": 90, "1y": 365, all: null };
 
 export const parsePeriod = (v: string | undefined): Period =>
-  (PERIODS as readonly string[]).includes(v ?? "") ? (v as Period) : "90d";
+  (PERIODS as readonly string[]).includes(v ?? "") ? (v as Period) : "all";
 
 /** ISO timestamp lower bound for a period ('' = no bound; compares below any ISO date). */
 export function periodCutoff(p: Period, now = new Date()): string {

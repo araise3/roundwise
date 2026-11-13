@@ -73,19 +73,21 @@ export function BarList({ items, max }: { items: { label: string; value: number;
 
 export interface CmpRow { label: string; a: unknown; b: unknown; f: Metric["fmt"]; desc?: string }
 
+type Team = { id: string; name: string };
+
 /**
- * Two-team comparison: metric | A | split bar | B. Headers show the teams' initials badges (full names in the
- * tooltip) so the value columns stay narrow; put the full names in the surrounding Section's description.
+ * Two-team comparison: metric | A | split bar | B. Headers show the teams' logos (full names in the tooltip)
+ * so the value columns stay narrow; put the full names in the surrounding Section's description.
  */
-export function CompareTable({ a, b, rows }: { a: string; b: string; rows: CmpRow[] }) {
+export function CompareTable({ a, b, rows }: { a: Team; b: Team; rows: CmpRow[] }) {
   return (
     <Table className={cn("[&_td]:px-1.5 [&_th]:px-1.5 sm:[&_td]:px-2 sm:[&_th]:px-2", flushTable)}>
       <TableHeader>
         <TableRow>
           <TableHead>Metric</TableHead>
-          <TableHead className="text-right" title={a}><TeamBadge name={a} side="a" /><span className="sr-only">{a}</span></TableHead>
+          <TableHead className="text-right" title={a.name}><TeamBadge id={a.id} side="a" /><span className="sr-only">{a.name}</span></TableHead>
           <TableHead className="hidden w-full min-w-12 sm:table-cell" />
-          <TableHead title={b}><TeamBadge name={b} side="b" /><span className="sr-only">{b}</span></TableHead>
+          <TableHead title={b.name}><TeamBadge id={b.id} side="b" /><span className="sr-only">{b.name}</span></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

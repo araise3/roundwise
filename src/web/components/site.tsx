@@ -3,11 +3,10 @@ import type { ReactNode } from "react";
 import type { Metric } from "../../stats/metrics";
 import { PERIODS, type Period } from "../../stats/periods";
 import type { Row } from "../../stats/queries";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { fmt, initials, title, withParams } from "@/lib/format";
+import { fmt, title, withParams } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 // ------------------------------------------------------------------ page structure
@@ -123,11 +122,20 @@ export function Hint({ text, children, asChild }: { text?: string; children: Rea
 
 export const MetricKV = ({ m, r }: { m: Metric; r: Row | null }) => <KV label={m.label} value={fmt(r?.[m.key], m.fmt)} hint={m.desc} />;
 
-export const TeamBadge = ({ name, side }: { name: string; side?: "a" | "b" }) => (
-  <Badge variant="outline" aria-hidden="true"
-    className={cn("font-mono", side === "a" && "border-transparent bg-team-a text-team-a-foreground", side === "b" && "border-transparent bg-team-b text-team-b-foreground")}>
-    {initials(name)}
-  </Badge>
+/**
+ * Team logo (light- and dark-mode versions from /logo/:id/:mode; an initials tile when the team has none).
+ * `side` adds the team A/B colour as a ring so it still matches swatches and comparison bars.
+ */
+export const TeamBadge = ({ id, side, size = "sm" }: { id: string; name?: string; side?: "a" | "b"; size?: "sm" | "lg" }) => (
+  <span aria-hidden="true" className={cn(
+    "inline-flex shrink-0 overflow-hidden rounded-md align-middle",
+    size === "lg" ? "size-8" : "size-5",
+    side && "ring-2 ring-offset-1 ring-offset-background",
+    side === "a" && "ring-team-a", side === "b" && "ring-team-b",
+  )}>
+    <img src={`/logo/${id}/light`} alt="" width={96} height={96} loading="lazy" decoding="async" className="size-full object-contain dark:hidden" />
+    <img src={`/logo/${id}/dark`} alt="" width={96} height={96} loading="lazy" decoding="async" className="hidden size-full object-contain dark:block" />
+  </span>
 );
 
 /** Small colour key for team A / B. */

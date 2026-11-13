@@ -29,6 +29,9 @@
   // Static files (CSS, fonts, GRID logo for the required attribution).
   "assets": { "directory": "./public" },
 
+  // Resizes team logos once at import (src/ingest/logos.ts).
+  "images": { "binding": "IMAGES", "remote": true },
+
   "d1_databases": [
     {
       "binding": "DB",

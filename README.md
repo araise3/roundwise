@@ -34,6 +34,10 @@ On Windows, if local D1 fails with `internal error`, the project path is too lon
 local SQLite file. Move the project to a shorter path, or add `--persist-to C:/rw-state`
 to both the `db:migrate:local` and `dev` commands.
 
+Team logos are resized with the Cloudflare Images binding. Local mode can't produce the raw pixels used for the
+contrast check, so `wrangler.jsonc` marks the binding `remote: true`: `wrangler dev` calls the real service and needs
+`npx wrangler login`. Logos are processed by the cron, 10 teams per run.
+
 UI: React 19 + shadcn/ui (Tailwind v4), server-rendered in the Worker with `react-dom/server` and hydrated in the browser
 (`src/client/main.tsx`). Each route renders one page component from `src/web/app.tsx` and embeds that page's props for hydration;
 there is no JSON API (ToS 5.2). shadcn components live in `src/web/components/ui` (add more with `npx shadcn@latest add <name>`).
@@ -78,7 +82,9 @@ The cron starts importing immediately. Tuning lives in `wrangler.jsonc` → `var
 - [ ] Don't train, fine-tune or benchmark ML models on the data without written approval (8.3).
       Only use third-party AI tools on the data under a paid business/enterprise plan with training disabled (8.2).
 - [ ] Never commit `.dev.vars` / `.env` or expose the key (3.3). Both are in `.gitignore`.
-- [ ] Team logos and Riot art aren't used (9.3). Teams show initials badges; agents and maps are text only.
+- [ ] Team logos: shown by the site owner's decision (Nov 2026) although ToS 9.3 grants no rights to team marks.
+      They come from GRID (`Team.logoUrl`), are resized at import and served from this Worker. Remove them if GRID
+      or a team objects. No Riot art is used; agents and maps are text only.
 - [ ] If GRID asks you to correct or remove player information, do it promptly (10.3).
 
 ## Layout

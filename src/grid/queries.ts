@@ -22,7 +22,7 @@ query ListSeries($after: Cursor, $from: String!, $titleId: ID!) {
         type
         format { nameShortened }
         tournament { id name nameShortened }
-        teams { baseInfo { id name nameShortened colorPrimary } }
+        teams { baseInfo { id name nameShortened colorPrimary logoUrl } }
       }
     }
   }
@@ -93,3 +93,7 @@ query SeriesState($id: ID!) {
     }
   }
 }`;
+
+/** Logo URLs for a batch of teams, one aliased `team(id)` field per id (Central Data). */
+export const teamLogosQuery = (ids: string[]) =>
+  `query TeamLogos {${ids.map((id, i) => ` t${i}: team(id: ${JSON.stringify(id)}) { id logoUrl }`).join("")} }`;

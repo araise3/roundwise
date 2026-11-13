@@ -67,7 +67,8 @@ leaderboard sort, and the About page's definitions. To add one:
 - **Never commit or log secrets.** `GRID_API_KEY` lives in `.dev.vars` locally and as a Wrangler secret in production.
 - Keep the GRID attribution, not-endorsed notice, and Riot legal notice in the footer.
 - `SITE_NAME` must not contain or resemble "GRID" or "Riot Open Access".
-- No team logos or Riot art; teams use initials badges, agents and maps are text only.
+- No Riot art; agents and maps are text only. Team logos are shown by the owner's decision although ToS 9.3 grants no
+  rights to team marks: only GRID's `Team.logoUrl`, processed by `src/ingest/logos.ts`, never hotlinked or taken from other sites.
 - No betting, odds, fantasy, or prediction-market features or links; no paywalls.
 - Data the Open Access tier does not provide (economy, trades, clutches, kill timelines, heatmaps, live data) cannot be added.
 
@@ -82,7 +83,9 @@ Every page must look tidy at 375, 768, 1280 and 1600 px wide, in light and dark 
 - Nothing scrolls sideways, spills out of its card, or is clipped before hydration (DataTable hides optional
   columns on phones until it has measured what fits).
 - Show tournament names through `eventName()` ("Champions Shanghai · Playoffs"), never the raw GRID string.
-- In two-team comparisons (`CompareTable`) the headers are initials badges; put full team names in the Section description.
+- Show teams with `TeamBadge` (logo, or initials tile when GRID has none; `side` adds the A/B colour ring). In two-team
+  comparisons (`CompareTable`) the headers are badges; put full team names in the Section description.
+- Logos need light- and dark-mode versions: `/logo/:id/light|dark`. Hard-to-see logos get a contrasting tile automatically.
 
 Before finishing a UI change, paste `scripts/layout-audit.js` into the browser console on the running site and run
 `await layoutAudit([...pages], [375, 768, 1280, 1600])` (and once with `{ noJs: true }` at 375). It must report `ok`
