@@ -10,12 +10,14 @@
  *   node scripts/import-logos.mjs --only 90,96          # just these team ids
  *
  * Needs LIQUIPEDIA_CONTACT (an email) in .dev.vars or the environment; it goes into the User-Agent.
- * Every API response is cached in .liquipedia-cache.json, so re-runs only ask Liquipedia about new teams.
+ * Every API response is cached in .liquipedia-cache.json and every image in .liquipedia-cache/, so re-runs only
+ * ask Liquipedia about new teams.
  * Requests are at least 2 s apart (API calls and image downloads). Teams with no Liquipedia icon keep their
  * GRID logo (filled in by the Worker cron). The shell's CLOUDFLARE_API_TOKEN is ignored for wrangler calls
  * (it lacks D1 access here); pass --use-api-token to keep it.
  */
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -61,6 +63,18 @@ const cache = {
   set: (k, v) => { cacheData[k] = v; writeFileSync(cacheFile, JSON.stringify(cacheData)); },
 };
 const lp = new LiquipediaClient(contact, cache);
+
+// Downloaded images are cached on disk too, so re-runs don't download them again.
+const imageDir = join(root, ".liquipedia-cache", "images");
+mkdirSync(imageDir, { recursive: true });
+const MAX_IMAGE = 45 * 1024;
+async function download(url) {
+  const file = join(imageDir, createHash("sha1").update(url).digest("hex"));
+  if (existsSync(file)) return readFileSync(file);
+  const buf = Buffer.from(await lp.download(url));
+  writeFileSync(file, buf);
+  return buf;
+}
 
 // ------------------------------------------------------------------ teams
 const teams = query("SELECT id, name, logo_source FROM teams ORDER BY name")
@@ -144,10 +158,17 @@ try {
       const ref = x.pick.light === x.pick.dark ? x.pick.light : `${x.pick.light} | ${x.pick.dark}`;
       results.push({ team: x.team, status: "ok", ref: `${x.pick.title}: ${ref}` });
       if (flag("--dry-run")) continue; // lookups only: no image downloads
-      const light = await lp.download(x.lightUrl);
-      const dark = x.darkUrl === x.lightUrl ? light : await lp.download(x.darkUrl);
-      sql.push(`UPDATE teams SET logo_light = ${hex(light)}, logo_dark = ${hex(dark)}, logo_source = 'liquipedia', logo_status = 'ok', ` +
-        `logo_ref = ${q(ref)}, logo_checked_at = ${q(now)} WHERE id = ${q(x.team.id)};`);
+      const light = await download(x.lightUrl);
+      const dark = x.darkUrl === x.lightUrl ? light : await download(x.darkUrl);
+      if (Math.max(light.byteLength, dark.byteLength) > MAX_IMAGE) {
+        results.pop();
+        results.push({ team: x.team, status: "missing", reason: `image too large for D1 (${Math.round(Math.max(light.byteLength, dark.byteLength) / 1024)} KB)` });
+        continue;
+      }
+      // One statement per image: D1 limits a statement to ~100 KB and hex doubles the size.
+      const id = q(x.team.id);
+      sql.push(`UPDATE teams SET logo_light = ${hex(light)} WHERE id = ${id};`, `UPDATE teams SET logo_dark = ${hex(dark)} WHERE id = ${id};`,
+        `UPDATE teams SET logo_source = 'liquipedia', logo_status = 'ok', logo_ref = ${q(ref)}, logo_checked_at = ${q(now)} WHERE id = ${id};`);
     }
     if (!flag("--dry-run") && sql.length) {
       const file = join(work, `logos-${i}.sql`);
