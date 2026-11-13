@@ -17,12 +17,16 @@ npm run backfill:local     # second terminal: triggers the cron importer repeate
 npm test                   # vitest: transform logic + schema/column sync
 npm run typecheck          # tsc --noEmit
 npm run types              # regenerate worker-configuration.d.ts after changing wrangler.jsonc bindings
-npm run deploy             # wrangler deploy
+npm run deploy             # apply remote D1 migrations, then wrangler deploy
 ```
 
 Run `npm test` and `npm run typecheck` before considering a change done.
 
-Deploying: if the shell's `CLOUDFLARE_API_TOKEN` lacks Workers permissions, deploy with the saved OAuth login:
+Deploying: pushes to `main` deploy automatically via Cloudflare Workers Builds (`npm run build`, then `npm run deploy`),
+which applies any new `migrations/` to the remote D1 database before the new code goes live. Migrations must be
+backward-compatible with the deployed code: add columns/tables, never drop or rename in the same push.
+
+If the shell's `CLOUDFLARE_API_TOKEN` lacks Workers permissions, deploy with the saved OAuth login:
 `env -u CLOUDFLARE_API_TOKEN npm run deploy`.
 
 ## Architecture

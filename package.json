@@ -6,7 +6,7 @@
   "scripts": {
     "build:css": "node scripts/copy-fonts.mjs && tailwindcss -i src/web/app.css -o public/app.css --minify",
     "dev": "wrangler dev --test-scheduled",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler d1 migrations apply roundwise --remote && wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply roundwise --local",
     "db:migrate:remote": "wrangler d1 migrations apply roundwise --remote",
     "backfill:local": "node scripts/backfill-local.mjs",

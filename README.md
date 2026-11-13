@@ -46,10 +46,13 @@ Tests: `npm test` (transform logic + schema/column sync). Typecheck: `npm run ty
 ```bash
 npx wrangler login
 npx wrangler d1 create roundwise           # paste the database_id into wrangler.jsonc
-npm run db:migrate:remote
 npx wrangler secret put GRID_API_KEY       # paste the key at the prompt
-npm run deploy
+npm run deploy                             # applies pending D1 migrations, then deploys
 ```
+
+Pushes to `main` deploy automatically via Cloudflare Workers Builds, which runs `npm run build` then `npm run deploy`,
+so new files in `migrations/` are applied to the remote D1 database before the new code goes live.
+Keep migrations backward-compatible with the currently deployed code (add columns/tables; don't drop or rename in the same push).
 
 The cron starts importing immediately. Tuning lives in `wrangler.jsonc` → `vars`:
 
