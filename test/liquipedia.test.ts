@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { candidateTitles, fileStem, infoboxImages, ownFiles, pickLogoFiles } from "../src/ingest/liquipedia";
+import { candidateTitles, fileStem, guessIconFiles, infoboxImages, isTeamPage, ownFiles, pickLogoFiles, titleMatch, titleVariants } from "../src/ingest/liquipedia";
 
 const f = (name: string, timestamp: string) => ({ name: `File:${name}`, timestamp });
 
@@ -58,5 +58,43 @@ describe("Liquipedia infobox aliases", () => {
       { name: "Futbolist 2021 darkmode.png", timestamp: "2023-01-01" },
     ], ["Futbolist"]);
     expect(pick).toEqual({ title: "FUT Esports", light: "Futbolist 2021 lightmode.png", dark: "Futbolist 2021 darkmode.png" });
+  });
+});
+
+describe("Liquipedia search matching", () => {
+  it("accepts titles whose distinctive words are all in the GRID name", () => {
+    expect(titleMatch("Dplus KIA", "Dplus")).toBe(1);
+    expect(titleMatch("RED Canids Kalunga", "RED Canids")).toBe(2);
+    expect(titleMatch("9z Globant", "9z Team")).toBe(1);
+    expect(titleMatch("KIWOOM DRX Academy", "DRX Academy")).toBeGreaterThan(titleMatch("KIWOOM DRX Academy", "DRX"));
+  });
+
+  it("rejects unrelated results", () => {
+    expect(titleMatch("MAYHEM", "Raze")).toBe(0);
+    expect(titleMatch("BNK FearX", "Nongshim RedForce")).toBe(0);
+    expect(titleMatch("TYLOO GAMING", "S-Tier Tournaments")).toBe(0);
+  });
+
+  it("recognises team pages", () => {
+    expect(isTeamPage(["{{Infobox team", "|name=DRX", "}}"].join("\n"))).toBe(true);
+    expect(isTeamPage(["{{Infobox league", "}}"].join("\n"))).toBe(false);
+  });
+
+  it("guesses usual icon names from the title and infobox", () => {
+    expect(guessIconFiles("Gen.G Global Academy", { image: "Gen.G 2024 full lightmode.png" })).toEqual(expect.arrayContaining([
+      "Gen.G Global Academy lightmode.png", "Gen.G 2024 lightmode.png", "Gen.G darkmode.png", "Gen.G allmode.png",
+    ]));
+  });
+});
+
+describe("Liquipedia title variants", () => {
+  it("tries the name without generic words and in title case", () => {
+    expect(titleVariants("TYLOO GAMING")).toEqual(["TYLOO GAMING", "TYLOO", "Tyloo Gaming", "Tyloo"]);
+    expect(titleVariants("MAYHEM")).toEqual(["MAYHEM", "Mayhem"]);
+    expect(titleVariants("Evil Geniuses (1)")).toEqual(["Evil Geniuses (1)", "Evil Geniuses"]);
+  });
+
+  it("matches accented titles", () => {
+    expect(titleMatch("LEVIATAN Academy", "Leviatán Academy")).toBe(2);
   });
 });

@@ -22,7 +22,9 @@ export interface LogoFiles {
 
 interface FileInfo { name: string; timestamp: string }
 
-const norm = (s: string) => s.replace(/^File:/i, "").replace(/_/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+/** Lower case, no accents ("Leviatán" = "leviatan"), single spaces, no "File:" prefix. */
+const norm = (s: string) =>
+  s.replace(/^File:/i, "").normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/_/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
 const MODE = /^(.*?)[ _](lightmode|darkmode|allmode)\.(png|svg)$/i;
 const SKIP = /\b(full|lp april fools|april fools|std|icon|banner|teamcard)\b/i;
 
@@ -80,6 +82,20 @@ export function candidateTitles(gridName: string): string[] {
   const a = gridName.trim();
   const b = a.replace(/\s*\(\d+\)$/, "").trim();
   return [...new Set([a, b])].filter(Boolean);
+}
+
+const GENERIC_WORDS = /\b(e-?sports?|gaming|club|team)\b/gi;
+
+/**
+ * Page titles to try for a GRID team name, in order: as is, without " (1)", without generic words
+ * ("TYLOO GAMING" → "TYLOO"), and title-cased when written in capitals ("MAYHEM" → "Mayhem").
+ * Variants after the first two must turn out to be team pages.
+ */
+export function titleVariants(gridName: string): string[] {
+  const [a, b = a] = candidateTitles(gridName);
+  const stripped = b.replace(GENERIC_WORDS, "").replace(/\s+/g, " ").trim();
+  const titled = (x: string) => (x === x.toUpperCase() ? x.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()) : x);
+  return [...new Set([a, b, stripped, titled(b), titled(stripped)])].filter(Boolean);
 }
 
 export interface Cache { get(key: string): unknown; set(key: string, value: unknown): void }
@@ -160,10 +176,17 @@ export class LiquipediaClient {
     return out;
   }
 
-  /** Best page title for a name via Liquipedia's search, or null. */
+  /** Best page title for a name via Liquipedia's title search, or null. */
   async search(name: string): Promise<string | null> {
     const j = await this.get<[string, string[]]>({ action: "opensearch", search: name, limit: "1", namespace: "0" });
     return j[1]?.[0] ?? null;
+  }
+
+  /** Full-text search: page titles, best first. */
+  async searchText(name: string, limit = 5): Promise<string[]> {
+    type R = { query?: { search?: { title: string }[] } };
+    const j = await this.get<R>({ action: "query", list: "search", srsearch: name, srnamespace: "0", srlimit: String(limit) });
+    return (j.query?.search ?? []).map((s) => s.title);
   }
 
   /** Upload timestamp and a thumbnail URL (fits size × size) per file, 50 files per request. */
@@ -187,3 +210,34 @@ export class LiquipediaClient {
 
 /** Key for `fileInfo` results. */
 export const fileKey = norm;
+
+const GENERIC = new Set(["esports", "esport", "e-sports", "gaming", "team", "club", "the", "gg", "of"]);
+const tokens = (s: string) => new Set(norm(s).split(/[^a-z0-9.]+/).filter((t) => t && !GENERIC.has(t)));
+
+/**
+ * How well a search-result page title matches a GRID team name: shared distinctive words (sponsors and words like
+ * "Esports" don't count), or 0. "Dplus" for "Dplus KIA" = 1, "Raze" for "MAYHEM" = 0.
+ */
+export function titleMatch(gridName: string, title: string): number {
+  const a = tokens(gridName), b = tokens(title);
+  let n = 0;
+  for (const t of b) if (a.has(t)) n++;
+  // Every distinctive word of the title must appear in the name ("DRX Academy" fits "KIWOOM DRX Academy").
+  return n > 0 && n === b.size ? n : 0;
+}
+
+export const isTeamPage = (wikitext: string) => /\{\{\s*Infobox team\b/i.test(wikitext);
+
+/** Usual icon file names to try for a team, from its page title and infobox logo: "<name>[ <year>] <mode>.png". */
+export function guessIconFiles(title: string, infobox: { image?: string; imagedark?: string }): string[] {
+  const bases = new Set<string>([title]);
+  for (const f of [infobox.image, infobox.imagedark]) {
+    const m = f?.replace(/^File:/i, "").match(MODE);
+    if (!m) continue;
+    const withYear = m[1].replace(/[ _]full\b/gi, "").replace(/_/g, " ").trim();
+    bases.add(withYear);
+    const stem = fileStem(f!);
+    if (stem) bases.add(stem);
+  }
+  return [...bases].flatMap((b) => ["lightmode", "darkmode", "allmode"].map((m) => `${b} ${m}.png`));
+}

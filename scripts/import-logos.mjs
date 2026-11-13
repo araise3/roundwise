@@ -21,7 +21,8 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
-  LiquipediaClient, LiquipediaRateLimited, candidateTitles, fileKey, fileStem, infoboxImages, pickLogoFiles, ownFiles,
+  LiquipediaClient, LiquipediaRateLimited, candidateTitles, fileKey, fileStem, guessIconFiles, infoboxImages, isTeamPage,
+  ownFiles, pickLogoFiles, titleMatch, titleVariants,
 } from "../src/ingest/liquipedia.ts";
 
 const SIZE = 96; // stored px (shown at 20-32 px)
@@ -66,23 +67,37 @@ const teams = query("SELECT id, name, logo_source FROM teams ORDER BY name")
   .filter((t) => (only ? only.includes(t.id) : flag("--force") || t.logo_source !== "liquipedia"));
 console.log(`${teams.length} teams to look up`);
 
-/** Find each team's Liquipedia page: exact name, then without "(1)", then search. */
+/** Find each team's Liquipedia page: name variants (exact, without "(1)", without generic words, title case), then search. */
 const pageOf = new Map();
-async function resolvePages(list, nameOf) {
+async function resolvePages(list, nameOf, mustBeTeam) {
   for (let i = 0; i < list.length; i += BATCH) {
     const chunk = list.slice(i, i + BATCH);
     const res = await lp.pages(chunk.map(nameOf));
-    for (const t of chunk) { const p = res.get(nameOf(t)); if (p) pageOf.set(t.id, p); }
+    for (const t of chunk) {
+      const p = res.get(nameOf(t));
+      if (p && (!mustBeTeam || isTeamPage(p.wikitext))) pageOf.set(t.id, p);
+    }
   }
 }
 
 const results = []; // { team, status, ref?, reason? }
 try {
-  await resolvePages(teams, (t) => candidateTitles(t.name)[0]);
-  await resolvePages(teams.filter((t) => !pageOf.has(t.id) && candidateTitles(t.name).length > 1), (t) => candidateTitles(t.name)[1]);
+  for (let v = 0; v < 5; v++) {
+    const todo = teams.filter((t) => !pageOf.has(t.id) && titleVariants(t.name).length > v);
+    if (todo.length) await resolvePages(todo, (t) => titleVariants(t.name)[v], v >= 2);
+  }
+  // Search: title search, then full-text search. Accept a result only if its distinctive words all appear in the
+  // GRID name ("Dplus" for "Dplus KIA", "RED Canids" for "RED Canids Kalunga") and it is a team page.
   for (const t of teams.filter((t) => !pageOf.has(t.id))) {
-    const found = await lp.search(candidateTitles(t.name).at(-1));
-    if (found) { const p = (await lp.pages([found])).get(found); if (p) pageOf.set(t.id, p); }
+    const name = candidateTitles(t.name).at(-1);
+    const found = [await lp.search(name), ...(await lp.searchText(name, 5))]
+      .filter((x, i, a) => x && a.indexOf(x) === i && titleMatch(name, x) > 0)
+      .sort((a, b) => titleMatch(name, b) - titleMatch(name, a))
+      .slice(0, 3);
+    if (!found.length) continue;
+    const res = await lp.pages(found);
+    const page = found.map((f) => res.get(f)).find((p) => p && isTeamPage(p.wikitext));
+    if (page) pageOf.set(t.id, page);
   }
 
   // Candidate files per team: files named after the page title, the GRID name or the infobox logo's name.
@@ -97,9 +112,16 @@ try {
   }
   const info = await lp.fileInfo(plan.flatMap((p) => p.files), SIZE);
 
+  // Pages whose images include no icon: try the usual icon file names ("<name>[ <year>] lightmode.png" ...).
+  const pickFrom = (p) => pickLogoFiles(p.page.title, p.files.map((f) => ({ name: f, timestamp: info.get(fileKey(f))?.timestamp ?? "" })), p.aliases);
+  const noIcon = plan.filter((p) => !pickFrom(p));
+  const guesses = new Map(noIcon.map((p) => [p, guessIconFiles(p.page.title, p.box)]));
+  for (const [k, v] of await lp.fileInfo([...guesses.values()].flat(), SIZE)) info.set(k, v);
+  for (const [p, g] of guesses) p.files = [...new Set([...p.files, ...g.filter((f) => info.has(fileKey(f)))])];
+
   const picks = [];
   for (const p of plan) {
-    let pick = pickLogoFiles(p.page.title, p.files.map((f) => ({ name: f, timestamp: info.get(fileKey(f))?.timestamp ?? "" })), p.aliases);
+    let pick = pickFrom(p);
     // Fall back to the infobox logo when it is an icon (not a full wordmark).
     if (!pick && p.box.image && !/\bfull\b/i.test(p.box.image)) {
       pick = { title: p.page.title, light: p.box.image, dark: p.box.imagedark ?? p.box.image };
@@ -134,6 +156,13 @@ try {
       console.log(`wrote ${Math.min(i + 20, picks.length)}/${picks.length}`);
     }
   }
+
+  // Teams that had a Liquipedia logo but no longer match go back to GRID's logo (the cron fills it in).
+  const stale = results.filter((r) => r.status === "missing" && r.team.logo_source === "liquipedia");
+  if (stale.length && !flag("--dry-run")) {
+    query(`UPDATE teams SET logo_source = NULL, logo_status = NULL, logo_ref = NULL WHERE id IN (${stale.map((r) => q(r.team.id)).join(", ")})`);
+    console.log(`reset ${stale.length} teams to GRID's logo: ${stale.map((r) => r.team.name.trim()).join(", ")}`);
+  }
 } catch (e) {
   if (e instanceof LiquipediaRateLimited) console.error("\nLiquipedia rate limit (429): stopped. Re-run later; cached lookups are reused.");
   else throw e;
@@ -144,6 +173,11 @@ const ok = results.filter((r) => r.status === "ok");
 const missing = results.filter((r) => r.status === "missing");
 console.log(`\n${ok.length} Liquipedia logos${flag("--dry-run") ? " found (dry run, nothing written)" : " written"}, ` +
   `${missing.length} teams without one, ${lp.requests} requests to Liquipedia`);
+const renamed = ok.filter((r) => r.ref.split(":")[0].toLowerCase() !== r.team.name.trim().toLowerCase());
+if (renamed.length) {
+  console.log("\nMatched under a different Liquipedia name (check these):");
+  for (const r of renamed) console.log(`  ${r.team.id.padStart(6)}  ${r.team.name.trim().padEnd(28)}  ${r.ref}`);
+}
 if (missing.length) {
   console.log("\nNo Liquipedia logo (they keep GRID's logo or initials):");
   for (const r of missing) console.log(`  ${r.team.id.padStart(6)}  ${r.team.name.trim().padEnd(28)}  ${r.reason}`);
