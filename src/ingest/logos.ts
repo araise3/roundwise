@@ -1,11 +1,14 @@
 /**
- * Team logos. GRID gives one logo per team (PNG/JPEG/WebP, often 600-4000 px) with no light/dark variants.
- * Each logo is processed once with the Images binding into two small PNGs, one per colour mode. If a logo is
- * hard to see on that mode's background (e.g. a white logo on a white page), that variant gets a contrasting tile.
- * Pages only ever load /logo/:id/:mode from this Worker, never GRID's CDN.
+ * Team logos, two small PNGs per team (light mode, dark mode), stored in D1 and served by /logo/:id/:mode.
+ *
+ * Source 1: Liquipedia (src/ingest/liquipedia.ts), which has separate light-mode and dark-mode icons.
+ * Source 2 (fallback): GRID's single Team.logoUrl.
+ * Each image is processed once with the Images binding. If a mode's image is still hard to see on that mode's
+ * background (e.g. a white GRID logo on a white page), that variant gets a contrasting tile.
  */
 import { gridQuery } from "../grid/client";
 import { CENTRAL_DATA_URL, teamLogosQuery } from "../grid/queries";
+import { LiquipediaClient, LiquipediaRateLimited } from "./liquipedia";
 
 const DAY = 24 * 3600_000;
 const SIZE = 96;      // output px (shown at 20-32 px, so sharp on 3x screens)
@@ -13,6 +16,8 @@ const TILE_PAD = 10;  // margin inside a tile
 export const TILE_ON_LIGHT = "#171717"; // dark tile behind light logos in light mode
 export const TILE_ON_DARK = "#f5f5f5";  // light tile behind dark logos in dark mode
 const ANALYSE = 48;   // px used to measure contrast
+const RECHECK = 30 * DAY; // teams on the GRID fallback (or with no logo) are looked up on Liquipedia again
+const LOCK_MS = 3 * 60_000;
 
 const lin = (c: number) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
 const luminance = (r: number, g: number, b: number) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
@@ -47,38 +52,52 @@ async function toBytes(stream: ReadableStream<Uint8Array>) {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-/** Two 96 px PNG variants (light mode, dark mode) for one logo. */
-export async function processLogo(images: ImagesBinding, src: ArrayBuffer) {
+/** One 96 px PNG for one colour mode; adds a contrasting tile if the image is hard to see in that mode. */
+async function variant(images: ImagesBinding, src: ArrayBuffer, mode: "light" | "dark") {
   const input = () => images.input(new Response(src).body!);
   const rgba = await toBytes((await input().transform({ width: ANALYSE, height: ANALYSE, fit: "contain" }).output({ format: "rgba" })).image());
-  const tile = tilePlan(logoVisibility(rgba));
-  const variant = async (color: string | null) => {
-    const t = color
-      ? input()
-        .transform({ width: SIZE - 2 * TILE_PAD, height: SIZE - 2 * TILE_PAD, fit: "pad", background: color })
-        .transform({ border: { color, width: TILE_PAD } })
-      : input().transform({ width: SIZE, height: SIZE, fit: "contain" });
-    return toBytes((await t.output({ format: "image/png" })).image());
-  };
-  return {
-    light: await variant(tile.light ? TILE_ON_LIGHT : null),
-    dark: await variant(tile.dark ? TILE_ON_DARK : null),
-    tile,
-  };
+  const tile = tilePlan(logoVisibility(rgba))[mode] ? (mode === "light" ? TILE_ON_LIGHT : TILE_ON_DARK) : null;
+  const t = tile
+    ? input()
+      .transform({ width: SIZE - 2 * TILE_PAD, height: SIZE - 2 * TILE_PAD, fit: "pad", background: tile })
+      .transform({ border: { color: tile, width: TILE_PAD } })
+    : input().transform({ width: SIZE, height: SIZE, fit: "contain" });
+  return toBytes((await t.output({ format: "image/png" })).image());
+}
+
+/** Light- and dark-mode PNGs from one image (GRID) or a light/dark pair (Liquipedia). */
+export async function processLogo(images: ImagesBinding, light: ArrayBuffer, dark: ArrayBuffer = light) {
+  return { light: await variant(images, light, "light"), dark: await variant(images, dark, "dark") };
+}
+
+/** One cron run at a time touches logos (runs every minute and Liquipedia calls are slow and rate limited). */
+async function lock(db: D1Database, now: Date) {
+  const until = new Date(now.getTime() + LOCK_MS).toISOString();
+  const r = await db.prepare(
+    `INSERT INTO meta (key, value) VALUES ('logo_lock', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1 WHERE meta.value < ?2`,
+  ).bind(until, now.toISOString()).run();
+  return r.meta.changes > 0;
 }
 
 /**
- * Process logos for teams not done yet (new teams, changed logo URL, or an error a week ago).
- * Looks up missing logo URLs in one Central Data request. Never throws: logos must not block the import.
+ * Process logos for teams that are new, changed, errored a week ago, or on the GRID fallback / without a logo
+ * for a month. With LIQUIPEDIA_CONTACT set, 5 teams per run (Liquipedia allows one request per 2 s); otherwise
+ * 10 per run from GRID only. Never throws: logos must not block the import.
  */
-export async function refreshLogos(env: Env, now: Date, limit = 10): Promise<number> {
+export async function refreshLogos(env: Env, now: Date): Promise<number> {
   const db = env.DB;
+  const contact = (env as { LIQUIPEDIA_CONTACT?: string }).LIQUIPEDIA_CONTACT;
+  const lp = contact ? new LiquipediaClient(contact) : null;
   try {
+    if (!(await lock(db, now))) return 0;
     const due = await db.prepare(
-      `SELECT id, logo_url FROM teams
-       WHERE logo_status IS NULL OR (logo_status = 'error' AND logo_checked_at < ?)
-       ORDER BY id LIMIT ?`,
-    ).bind(new Date(now.getTime() - 7 * DAY).toISOString(), limit).all<{ id: string; logo_url: string | null }>();
+      `SELECT id, name, logo_url FROM teams
+       WHERE logo_status IS NULL
+          OR (logo_status = 'error' AND logo_checked_at < ?1)
+          OR ((logo_status = 'none' OR logo_source = 'grid') AND logo_checked_at < ?2 AND ?3)
+       ORDER BY id LIMIT ?4`,
+    ).bind(new Date(now.getTime() - 7 * DAY).toISOString(), new Date(now.getTime() - RECHECK).toISOString(), lp ? 1 : 0, lp ? 5 : 10)
+      .all<{ id: string; name: string; logo_url: string | null }>();
     if (!due.results.length) return 0;
 
     const missing = due.results.filter((t) => !t.logo_url).map((t) => t.id);
@@ -91,23 +110,41 @@ export async function refreshLogos(env: Env, now: Date, limit = 10): Promise<num
     }
 
     const nowIso = now.toISOString();
-    for (const { id } of due.results) {
+    let done = 0;
+    for (const { id, name } of due.results) {
       const url = urls.get(id) ?? null;
-      const set = (status: string, light: Uint8Array | null = null, dark: Uint8Array | null = null) =>
-        db.prepare("UPDATE teams SET logo_url = ?, logo_status = ?, logo_light = ?, logo_dark = ?, logo_checked_at = ? WHERE id = ?")
-          .bind(url, status, light, dark, nowIso, id).run();
-      if (!isRealLogo(url)) { await set("none"); continue; }
+      let ref: string | null = null; // Liquipedia file name(s) used
+      const set = (status: string, source: string | null, light: Uint8Array | null = null, dark: Uint8Array | null = null) =>
+        db.prepare(
+          `UPDATE teams SET logo_url = ?, logo_status = ?, logo_source = ?, logo_light = ?, logo_dark = ?, logo_checked_at = ?,
+             logo_ref = ? WHERE id = ?`,
+        ).bind(url, status, source, light, dark, nowIso, ref, id).run();
       try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`logo HTTP ${res.status}`);
-        const out = await processLogo(env.IMAGES, await res.arrayBuffer());
-        await set("ok", out.light, out.dark);
+        const hit = lp ? await lp.findLogo(name) : null;
+        if (hit) {
+          ref = hit.light === hit.dark ? hit.light : `${hit.light} | ${hit.dark}`;
+          const light = await lp!.download(hit.lightUrl);
+          const dark = hit.darkUrl === hit.lightUrl ? light : await lp!.download(hit.darkUrl);
+          const out = await processLogo(env.IMAGES, light, dark);
+          await set("ok", "liquipedia", out.light, out.dark);
+        } else if (isRealLogo(url)) {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`logo HTTP ${res.status}`);
+          const out = await processLogo(env.IMAGES, await res.arrayBuffer());
+          await set("ok", "grid", out.light, out.dark);
+        } else {
+          await set("none", null);
+        }
+        done++;
       } catch (e) {
+        if (e instanceof LiquipediaRateLimited) { console.warn("logos: Liquipedia rate limit, stopping"); break; }
         console.warn("logo", id, String(e));
-        await set("error");
+        // Keep whatever images the team already has; retry in a week.
+        await db.prepare("UPDATE teams SET logo_status = 'error', logo_checked_at = ? WHERE id = ?").bind(nowIso, id).run();
       }
     }
-    return due.results.length;
+    await db.prepare("DELETE FROM meta WHERE key = 'logo_lock'").run();
+    return done;
   } catch (e) {
     console.warn("refreshLogos", String(e));
     return 0;
