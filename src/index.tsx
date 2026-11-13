@@ -86,11 +86,11 @@ app.get("/team/:id", async (c) => {
   const cutoff = periodCutoff(period);
   const team = await Q.teamInfo(db, id);
   if (!team) return notFound(c);
-  const [summary, losses, byMap, roster, recent] = await Promise.all([
+  const [summary, losses, byMap, roster, recent, vetoes] = await Promise.all([
     Q.teamSummary(db, id, cutoff), Q.teamLosses(db, id, cutoff), Q.teamByMap(db, id, cutoff),
-    Q.teamRoster(db, id, cutoff), Q.teamRecentMaps(db, id),
+    Q.teamRoster(db, id, cutoff), Q.teamRecentMaps(db, id), Q.teamVetoes(db, id, cutoff),
   ]);
-  return render(c, "team", { period, d: { team, summary, losses, byMap, roster, recent } }, { title: team.name, active: "/teams" });
+  return render(c, "team", { period, d: { team, summary, losses, byMap, roster, recent, vetoes } }, { title: team.name, active: "/teams" });
 });
 
 app.get("/compare", async (c) => {

@@ -8,7 +8,7 @@ import { PLAYER_SUM_COLS, TEAM_SUM_COLS, type PlayerSums, type TeamSums } from "
 
 export interface GameRow {
   id: string; series_id: string; seq: number; map: string; start_time: string;
-  winner_id: string | null; loser_id: string | null; rounds: number; overtime: number;
+  winner_id: string | null; loser_id: string | null; rounds: number; overtime: number; partial: number;
 }
 export interface RoundRow {
   game_id: string; round_no: number; winner_id: string; atk_id: string; def_id: string;
@@ -19,11 +19,11 @@ export interface RoundRow {
 export type GameTeamRow = TeamSums & {
   game_id: string; team_id: string; opponent_id: string; series_id: string; map: string; start_time: string;
   won: number; score: number; opp_score: number; start_side: string | null;
-  max_lead: number; max_deficit: number; best_streak: number;
+  max_lead: number; max_deficit: number; best_streak: number; partial: number;
 };
 export type GamePlayerRow = PlayerSums & {
   game_id: string; player_id: string; team_id: string; opponent_id: string; series_id: string;
-  map: string; start_time: string; won: number; agent: string | null; weapons: string;
+  map: string; start_time: string; won: number; agent: string | null; weapons: string; partial: number;
 };
 export interface PlayerRef { id: string; name: string; team_id: string }
 
@@ -38,6 +38,16 @@ export interface TransformResult {
 }
 
 const PISTOL_ROUNDS = [1, 13];
+
+/** GRID map names that differ from the in-game name (internal codenames). */
+const MAP_ALIASES: Record<string, string> = { plummet: "summit" };
+export const mapName = (raw: string) => { const m = raw.trim().toLowerCase(); return MAP_ALIASES[m] ?? m; };
+
+/** A final map score VALORANT can actually end on: 13 with a 2-round lead, or a 2-round lead in overtime. */
+export const isFinalScore = (a: number, b: number) => {
+  const hi = Math.max(a, b), lo = Math.min(a, b);
+  return hi >= 13 && hi - lo >= 2 && (hi === 13 || hi - lo === 2);
+};
 const REGULATION_ROUNDS = 24;
 
 const zeros = <K extends string>(cols: readonly K[]) =>
@@ -92,7 +102,7 @@ export function transformGame(seriesId: string, game: GameState, startTime: stri
   if (rounds.length === 0) return null;
 
   const gameId = `${seriesId}-${game.sequenceNumber}`;
-  const map = game.map.name.toLowerCase();
+  const map = mapName(game.map.name);
   const [t1, t2] = game.teams;
   const opp = (id: string) => (id === t1.id ? t2.id : t1.id);
   const overtime = rounds.some((r) => r.no > REGULATION_ROUNDS) ? 1 : 0;
@@ -214,6 +224,9 @@ export function transformGame(seriesId: string, game: GameState, startTime: stri
     }
   }
 
+  // Data that stops before the map ended is kept for the match page but left out of all stats.
+  const partial = isFinalScore(flow.get(t1.id)!.score, flow.get(t2.id)!.score) ? 0 : 1;
+
   // game-level player totals (authoritative for K/D/A/damage) + team totals
   const gamePlayers: GamePlayerRow[] = [];
   const players: PlayerRef[] = [];
@@ -228,7 +241,7 @@ export function transformGame(seriesId: string, game: GameState, startTime: stri
       gamePlayers.push({
         ...s, game_id: gameId, player_id: p.id, team_id: team.id, opponent_id: opp(team.id),
         series_id: seriesId, map, start_time: startTime, won: team.won ? 1 : 0,
-        agent: p.character?.name?.toLowerCase() ?? null, weapons: JSON.stringify(weapons),
+        agent: p.character?.name?.toLowerCase() ?? null, weapons: JSON.stringify(weapons), partial,
       });
       players.push({ id: p.id, name: p.name, team_id: team.id });
     }
@@ -244,7 +257,7 @@ export function transformGame(seriesId: string, game: GameState, startTime: stri
       game_id: gameId, team_id: team.id, opponent_id: opp(team.id), series_id: seriesId, map, start_time: startTime,
       won: team.won ? 1 : 0, score: f.score, opp_score: o.score,
       start_side: firstRound.atk.id === team.id ? "attacker" : firstRound.def.id === team.id ? "defender" : null,
-      max_lead: f.maxLead, max_deficit: f.maxDeficit, best_streak: f.best,
+      max_lead: f.maxLead, max_deficit: f.maxDeficit, best_streak: f.best, partial,
     };
   });
 
@@ -253,7 +266,7 @@ export function transformGame(seriesId: string, game: GameState, startTime: stri
     game: {
       id: gameId, series_id: seriesId, seq: game.sequenceNumber, map, start_time: startTime,
       winner_id: winner?.id ?? null, loser_id: winner ? opp(winner.id) : null,
-      rounds: rounds.length, overtime,
+      rounds: rounds.length, overtime, partial,
     } satisfies GameRow,
     rounds: roundRows,
     gameTeams,

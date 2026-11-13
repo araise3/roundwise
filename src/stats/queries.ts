@@ -48,11 +48,19 @@ export async function recentSeries(db: D1Database, limit: number, offset = 0, te
     limit, offset, ...(teamId ? [teamId] : []));
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
-  const maps = await all(db,
-    `SELECT g.series_id, g.seq, g.map, gt.team_id, gt.score
-     FROM games g JOIN game_teams gt ON gt.game_id = g.id
-     WHERE g.series_id IN (${ids.map(() => "?").join(",")}) ORDER BY g.seq`, ...ids);
+  const ph = ids.map(() => "?").join(",");
+  const [maps, vlr] = await Promise.all([
+    all(db,
+      `SELECT g.series_id, g.seq, g.map, gt.team_id, gt.score
+       FROM games g JOIN game_teams gt ON gt.game_id = g.id
+       WHERE g.series_id IN (${ph}) ORDER BY g.seq`, ...ids),
+    all(db, `SELECT * FROM vlr_maps WHERE series_id IN (${ph}) ORDER BY map_index`, ...ids),
+  ]);
   return rows.map((s) => {
+    const fromVlr = vlr.filter((m) => m.series_id === s.id);
+    if (fromVlr.length) {
+      return { ...s, maps: fromVlr.map((m) => ({ map: m.map, scores: { [s.team1_id]: m.team1_score, [s.team2_id]: m.team2_score } })) };
+    }
     const byGame = new Map<number, Row>();
     for (const m of maps.filter((m) => m.series_id === s.id)) {
       const g = byGame.get(m.seq) ?? { map: m.map, scores: {} as Record<string, number> };
@@ -72,9 +80,14 @@ export async function seriesDetail(db: D1Database, id: string) {
      LEFT JOIN tournaments tr ON tr.id = s.tournament_id
      WHERE s.id = ? AND s.status = 'done'`, id);
   if (!series) return null;
-  const games = await all(db, "SELECT * FROM games WHERE series_id = ? ORDER BY seq", id);
+  const [games, vlrMaps, vetoes] = await Promise.all([
+    all(db, "SELECT * FROM games WHERE series_id = ? ORDER BY seq", id),
+    all(db, "SELECT * FROM vlr_maps WHERE series_id = ? ORDER BY map_index", id),
+    all(db, `SELECT v.*, t.name AS team_name FROM vlr_vetoes v LEFT JOIN teams t ON t.id = v.team_id
+             WHERE v.series_id = ? ORDER BY v.order_num`, id),
+  ]);
   const gameIds = games.map((g) => g.id);
-  if (!gameIds.length) return { series, games: [] };
+  if (!gameIds.length) return { series, games: [], vlrMaps, vetoes };
   const ph = gameIds.map(() => "?").join(",");
   const [rounds, teams, players] = await Promise.all([
     all(db, `SELECT * FROM rounds WHERE game_id IN (${ph}) ORDER BY game_id, round_no`, ...gameIds),
@@ -86,11 +99,13 @@ export async function seriesDetail(db: D1Database, id: string) {
   ]);
   return {
     series,
+    vlrMaps,
+    vetoes,
     games: games.map((g) => ({
       ...g,
       rounds: rounds.filter((r) => r.game_id === g.id),
       teams: teams.filter((t) => t.game_id === g.id),
-      players: players.filter((p) => p.game_id === g.id).sort((a, b) => b.adr - a.adr),
+      players: players.filter((p) => p.game_id === g.id).sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1) || b.adr - a.adr),
     })),
   };
 }
@@ -100,10 +115,10 @@ export async function seriesDetail(db: D1Database, id: string) {
 export const teamInfo = (db: D1Database, id: string) => first(db, "SELECT * FROM teams WHERE id = ?", id);
 
 export const teamSummary = (db: D1Database, id: string, cutoff: string) =>
-  first(db, withTeamMetrics(`SELECT ${teamSums()} FROM game_teams WHERE team_id = ? AND start_time >= ?`), id, cutoff);
+  first(db, withTeamMetrics(`SELECT ${teamSums()} FROM game_teams WHERE team_id = ? AND start_time >= ? AND partial = 0`), id, cutoff);
 
 export const teamByMap = (db: D1Database, id: string, cutoff: string) =>
-  all(db, withTeamMetrics(`SELECT map, ${teamSums()} FROM game_teams WHERE team_id = ? AND start_time >= ? GROUP BY map`)
+  all(db, withTeamMetrics(`SELECT map, ${teamSums()} FROM game_teams WHERE team_id = ? AND start_time >= ? AND partial = 0 GROUP BY map`)
     + " ORDER BY maps DESC", id, cutoff);
 
 /** How the team loses rounds = how its opponents won them. */
@@ -113,12 +128,12 @@ export const teamLosses = (db: D1Database, id: string, cutoff: string) =>
             SUM(o.win_elim_atk) AS def_loss_elim, SUM(o.win_boom_atk) AS def_loss_boom,
             SUM(o.atk_rounds - o.atk_wins) AS def_losses_check
      FROM game_teams t JOIN game_teams o ON o.game_id = t.game_id AND o.team_id = t.opponent_id
-     WHERE t.team_id = ? AND t.start_time >= ?`, id, cutoff);
+     WHERE t.team_id = ? AND t.start_time >= ? AND t.partial = 0`, id, cutoff);
 
 export const teamRoster = (db: D1Database, id: string, cutoff: string) =>
   all(db, withPlayerMetrics(`SELECT gp.player_id, p.name, ${playerSums}
     FROM game_players gp JOIN players p ON p.id = gp.player_id
-    WHERE gp.game_id IN (SELECT game_id FROM game_teams WHERE team_id = ?1 AND start_time >= ?2) AND gp.team_id = ?1
+    WHERE gp.game_id IN (SELECT game_id FROM game_teams WHERE team_id = ?1 AND start_time >= ?2 AND partial = 0) AND gp.team_id = ?1
     GROUP BY gp.player_id`) + " ORDER BY rounds DESC", id, cutoff);
 
 export const teamRecentMaps = (db: D1Database, id: string, limit = 15) =>
@@ -128,7 +143,14 @@ export const teamRecentMaps = (db: D1Database, id: string, limit = 15) =>
      JOIN teams o ON o.id = gt.opponent_id
      JOIN series s ON s.id = gt.series_id
      LEFT JOIN tournaments tr ON tr.id = s.tournament_id
-     WHERE gt.team_id = ? ORDER BY gt.start_time DESC, gt.game_id DESC LIMIT ?`, id, limit);
+     WHERE gt.team_id = ? AND gt.partial = 0 ORDER BY gt.start_time DESC, gt.game_id DESC LIMIT ?`, id, limit);
+
+/** Map picks and bans from vlr.gg vetoes (VCT only). */
+export const teamVetoes = (db: D1Database, id: string, cutoff: string) =>
+  all(db,
+    `SELECT v.map, SUM(v.action = 'pick') AS picks, SUM(v.action = 'ban') AS bans
+     FROM vlr_vetoes v JOIN series s ON s.id = v.series_id
+     WHERE v.team_id = ? AND s.start_time >= ? GROUP BY v.map ORDER BY picks DESC, bans ASC`, id, cutoff);
 
 export const teamList = (db: D1Database, period: Period, q: string, minMaps: number) =>
   all(db, withTeamMetrics(`SELECT a.*, t.name FROM agg_teams a JOIN teams t ON t.id = a.team_id
@@ -141,23 +163,23 @@ export const playerInfo = (db: D1Database, id: string) =>
   first(db, "SELECT p.*, t.name AS team_name FROM players p LEFT JOIN teams t ON t.id = p.last_team_id WHERE p.id = ?", id);
 
 export const playerSummary = (db: D1Database, id: string, cutoff: string) =>
-  first(db, withPlayerMetrics(`SELECT ${playerSums} FROM game_players WHERE player_id = ? AND start_time >= ?`), id, cutoff);
+  first(db, withPlayerMetrics(`SELECT ${playerSums} FROM game_players WHERE player_id = ? AND start_time >= ? AND partial = 0`), id, cutoff);
 
 export const playerBy = (db: D1Database, id: string, cutoff: string, col: "map" | "agent") =>
   all(db, withPlayerMetrics(`SELECT ${col} AS k, ${playerSums} FROM game_players
-    WHERE player_id = ? AND start_time >= ? GROUP BY ${col}`) + " ORDER BY maps DESC", id, cutoff);
+    WHERE player_id = ? AND start_time >= ? AND partial = 0 GROUP BY ${col}`) + " ORDER BY maps DESC", id, cutoff);
 
 export const playerWeapons = (db: D1Database, id: string, cutoff: string) =>
   all(db,
     `SELECT j.key AS weapon, SUM(j.value) AS kills
      FROM game_players gp, json_each(gp.weapons) j
-     WHERE gp.player_id = ? AND gp.start_time >= ? GROUP BY j.key ORDER BY kills DESC`, id, cutoff);
+     WHERE gp.player_id = ? AND gp.start_time >= ? AND gp.partial = 0 GROUP BY j.key ORDER BY kills DESC`, id, cutoff);
 
 export const playerRecent = (db: D1Database, id: string, limit = 15) =>
   all(db, withPlayerMetrics(
     `SELECT gp.game_id, gp.series_id, gp.map, gp.agent, gp.start_time, gp.won AS won_map, o.name AS opp_name, ${playerSums}
      FROM game_players gp JOIN teams o ON o.id = gp.opponent_id
-     WHERE gp.player_id = ? GROUP BY gp.game_id`) + " ORDER BY start_time DESC LIMIT ?", id, limit);
+     WHERE gp.player_id = ? AND gp.partial = 0 GROUP BY gp.game_id`) + " ORDER BY start_time DESC LIMIT ?", id, limit);
 
 export const playerList = (db: D1Database, period: Period, q: string, minRounds: number) =>
   all(db, withPlayerMetrics(`SELECT a.*, p.name, t.name AS team_name, p.last_team_id
@@ -191,7 +213,7 @@ export const mapSummary = (db: D1Database, map: string, period: Period) =>
 export const mapTeams = (db: D1Database, map: string, cutoff: string, minMaps: number) =>
   all(db, withTeamMetrics(`SELECT gt.team_id, t.name, ${teamSums("gt.")}
     FROM game_teams gt JOIN teams t ON t.id = gt.team_id
-    WHERE gt.map = ? AND gt.start_time >= ? GROUP BY gt.team_id HAVING COUNT(*) >= ?`) + " ORDER BY map_wr DESC, maps DESC LIMIT 50",
+    WHERE gt.map = ? AND gt.start_time >= ? AND gt.partial = 0 GROUP BY gt.team_id HAVING COUNT(*) >= ?`) + " ORDER BY map_wr DESC, maps DESC LIMIT 50",
     map, cutoff, minMaps);
 
 // ------------------------------------------------------------------ search

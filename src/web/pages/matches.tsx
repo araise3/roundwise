@@ -1,10 +1,11 @@
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { byKey, PLAYER_METRICS, TEAM_METRICS } from "../../stats/metrics";
 import type { Row } from "../../stats/queries";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CompareTable, mapNotes, RoundStrip, ScoreFlow } from "@/components/charts";
 import {
-  DataTable, Empty, PageHeader, PlayerLink, Section, Swatch, TeamBadge, TeamLink, type Col,
+  DataTable, Empty, hasVlr, PageHeader, PlayerLink, Section, Swatch, TeamBadge, TeamLink, type Col,
 } from "@/components/site";
 import { date, eventName, title } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -78,17 +79,22 @@ function topWeapons(json: string) {
   }
 }
 
-export function SeriesDetail({ data }: { data: { series: Row; games: Row[] } }) {
-  const { series: s, games } = data;
+export function SeriesDetail({ data }: { data: { series: Row; games: Row[]; vlrMaps?: Row[]; vetoes?: Row[] } }) {
+  const { series: s, games, vlrMaps = [], vetoes = [] } = data;
   const names: Record<string, string> = { [s.team1_id]: s.t1_name, [s.team2_id]: s.t2_name };
   const t1 = s.winner_id === s.team1_id;
   const t2 = s.winner_id === s.team2_id;
-  const playerCols: Col[] = [
+  const playerCols = (vlr: boolean): Col[] => [
     { key: "name", label: "Player", render: (r) => <PlayerLink id={r.player_id} name={r.name} /> },
     { key: "agent", label: "Agent", render: (r) => <span className="text-muted-foreground">{title(r.agent)}</span> },
     { key: "kills", label: "K", num: true },
     { key: "deaths", label: "D", num: true },
     { key: "assists", label: "A", num: true },
+    ...(vlr ? [
+      { key: "rating", label: "Rating", num: true, fmt: "dec2", hint: PM.rating.desc },
+      { key: "acs", label: "ACS", num: true, fmt: "int", hint: PM.acs.desc },
+      { key: "kast", label: "KAST%", num: true, fmt: "pct", hint: PM.kast.desc },
+    ] satisfies Col[] : []),
     { key: "adr", label: "ADR", num: true, fmt: "dec1", hint: PM.adr.desc },
     { key: "dtr", label: "DTR", num: true, fmt: "dec1", hint: PM.dtr.desc },
     { key: "surv", label: "Surv%", num: true, fmt: "pct", hint: PM.surv.desc },
@@ -100,6 +106,18 @@ export function SeriesDetail({ data }: { data: { series: Row; games: Row[] } }) 
     { key: "def_kpr", label: "DEF KPR", num: true, fmt: "dec2", hint: PM.def_kpr.desc },
     { key: "weapons", label: "Top weapons", noSort: true, render: (r) => <span className="text-muted-foreground">{topWeapons(r.weapons)}</span> },
   ];
+
+  // Map list: vlr.gg's (played order, real final scores, includes maps GRID is missing) when the series was matched.
+  type Entry = { n: number; map: string; game: Row | null; final: [number | null, number | null] | null };
+  const gridScore = (g: Row, id: string): number | null => g.teams.find((t: Row) => t.team_id === id)?.score ?? null;
+  const entries: Entry[] = vlrMaps.length
+    ? [
+      ...vlrMaps.map((v) => ({ n: v.map_index, map: v.map, game: games.find((g) => g.id === v.game_id) ?? null, final: [v.team1_score, v.team2_score] as Entry["final"] })),
+      ...games.filter((g) => !vlrMaps.some((v) => v.game_id === g.id)).map((g) => ({ n: g.seq, map: g.map, game: g, final: null })),
+    ]
+    : games.map((g) => ({ n: g.seq, map: g.map, game: g, final: null }));
+  const score = (e: Entry) => e.final ?? [gridScore(e.game!, s.team1_id), gridScore(e.game!, s.team2_id)];
+  const ot = (e: Entry) => { const [a, b] = score(e); return Math.max(a ?? 0, b ?? 0) > 13; };
 
   return (
     <>
@@ -120,22 +138,55 @@ export function SeriesDetail({ data }: { data: { series: Row; games: Row[] } }) 
             </span>
           </span>
         }
-        meta={[date(s.start_time), s.format ? s.format.toUpperCase() : "", ...games.map((g) => {
-          const sc = (id: string) => g.teams.find((t: Row) => t.team_id === id)?.score ?? "?";
-          return `${title(g.map)} ${sc(s.team1_id)}–${sc(s.team2_id)}${g.overtime ? " OT" : ""}`;
+        meta={[date(s.start_time), s.format ? s.format.toUpperCase() : "", ...entries.map((e) => {
+          const [a, b] = score(e);
+          return `${title(e.map)} ${a ?? "?"}–${b ?? "?"}${ot(e) ? " OT" : ""}`;
         })]}
       />
+      {vetoes.length > 0 && (
+        <p className="-mt-3 mb-6 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <span>Veto (vlr.gg):</span>
+          {vetoes.map((v) => (
+            <span key={v.order_num}>
+              {v.team_name ? <><span className="text-foreground">{v.team_name}</span> {v.action} </> : null}
+              <span className={v.action === "ban" ? "line-through decoration-muted-foreground/60" : "text-foreground"}>{title(v.map)}</span>
+              {v.action === "decider" ? " (decider)" : ""}
+            </span>
+          ))}
+        </p>
+      )}
       <div className="space-y-8">
-        {games.map((g) => {
+        {entries.map((e) => {
+          const [fa, fb] = score(e);
+          const scoreTag = (
+            <span className="font-mono text-sm tabular-nums">
+              <span className="inline-flex items-center gap-1.5"><Swatch side="a" />{fa ?? "?"}</span> – <span className="inline-flex items-center gap-1.5">{fb ?? "?"}<Swatch side="b" /></span>{ot(e) ? " · OT" : ""}
+            </span>
+          );
+          const g = e.game;
+          if (!g) {
+            return (
+              <Section key={`v${e.n}`} title={`Map ${e.n} · ${title(e.map)}`} action={scoreTag}>
+                <p className="text-sm text-muted-foreground">GRID has no data for this map. Final score from vlr.gg.</p>
+              </Section>
+            );
+          }
           const ta = g.teams.find((t: Row) => t.team_id === s.team1_id) ?? g.teams[0];
           const tb = g.teams.find((t: Row) => t.team_id !== ta?.team_id);
           const teamA = ta?.team_id ?? s.team1_id;
           const notes = [`${names[ta?.team_id]} start ${ta?.start_side ?? "?"}`, ...mapNotes(g.rounds, names)];
+          const vlr = hasVlr(g.players);
           return (
             <section key={g.seq} className="space-y-4">
               <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_440px]">
-                <Section title={`Map ${g.seq} · ${title(g.map)}`}
-                  action={<span className="font-mono text-sm tabular-nums"><span className="inline-flex items-center gap-1.5"><Swatch side="a" />{ta?.score ?? "?"}</span> – <span className="inline-flex items-center gap-1.5">{tb?.score ?? "?"}<Swatch side="b" /></span>{g.overtime ? " · OT" : ""}</span>}>
+                <Section action={scoreTag}
+                  title={<span className="inline-flex flex-wrap items-center gap-2">{`Map ${e.n} · ${title(e.map)}`}{g.partial ? <Badge variant="outline" className="font-normal text-muted-foreground">Incomplete data</Badge> : null}</span>}>
+                  {g.partial ? (
+                    <p className="mb-3 text-sm text-muted-foreground">
+                      GRID&apos;s data for this map stops at {gridScore(g, s.team1_id)}–{gridScore(g, s.team2_id)}
+                      {e.final ? "; the final score is from vlr.gg" : ""}. This map is left out of all stats.
+                    </p>
+                  ) : null}
                   <RoundStrip rounds={g.rounds} teamA={teamA} names={names} />
                   <div className="mt-4 border-t pt-4"><ScoreFlow rounds={g.rounds} teamA={teamA} names={names} /></div>
                   <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">{notes.map((n) => <li key={n}>{n}</li>)}</ul>
@@ -152,16 +203,16 @@ export function SeriesDetail({ data }: { data: { series: Row; games: Row[] } }) 
                 )}
               </div>
               {[ta, tb].filter(Boolean).map((t) => (
-                <Section key={t.team_id} flush description={title(g.map)}
+                <Section key={t.team_id} flush description={vlr ? `${title(g.map)} · Rating, ACS and KAST from vlr.gg` : title(g.map)}
                   title={<span className="inline-flex items-center gap-2"><TeamBadge id={t.team_id} side={t.team_id === teamA ? "a" : "b"} />{names[t.team_id]}</span>}>
-                  <DataTable cols={playerCols} rows={g.players.filter((p: Row) => p.team_id === t.team_id)} />
+                  <DataTable cols={playerCols(vlr)} rows={g.players.filter((p: Row) => p.team_id === t.team_id)} />
                 </Section>
               ))}
             </section>
           );
         })}
       </div>
-      {!games.length && <Section title="Maps"><Empty>No round data for this match.</Empty></Section>}
+      {!entries.length && <Section title="Maps"><Empty>No round data for this match.</Empty></Section>}
     </>
   );
 }

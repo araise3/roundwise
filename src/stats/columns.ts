@@ -18,6 +18,10 @@ export const TEAM_SUM_COLS = [
   "flawless", "lost_rounds", "survivors_in_losses",
   "overtime",
   "kills", "deaths", "damage", "damage_taken", "headshots",
+  // vlr.gg economy (VCT only; 0 elsewhere): own buy per non-pistol round, and anti-eco rounds
+  "vlr_eco_rounds", "vlr_eco_wins", "vlr_semieco_rounds", "vlr_semieco_wins",
+  "vlr_semibuy_rounds", "vlr_semibuy_wins", "vlr_fullbuy_rounds", "vlr_fullbuy_wins",
+  "vlr_antieco_rounds", "vlr_antieco_wins",
 ] as const;
 
 /** Per player, per map (game_players). */
@@ -28,6 +32,10 @@ export const PLAYER_SUM_COLS = [
   "survived", "kas_rounds", "fk", "fk_wins",
   "mk2", "mk3", "mk4", "mk5",
   "pistol_rounds", "pistol_kills", "pistol_survived",
+  // vlr.gg (VCT only; 0 elsewhere): value x rounds sums, each with its own rounds count
+  "vlr_rating_rounds", "vlr_rating", "vlr_acs_rounds", "vlr_acs", "vlr_kast_rounds", "vlr_kast",
+  "vlr_perf_rounds", "vlr_clutches", "vlr_econ", "vlr_plants", "vlr_defuses",
+  "vlr_atk_rounds", "vlr_atk_rating", "vlr_def_rounds", "vlr_def_rating",
 ] as const;
 
 export type TeamSumCol = (typeof TEAM_SUM_COLS)[number];

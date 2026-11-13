@@ -143,6 +143,9 @@ export const Swatch = ({ side }: { side: "a" | "b" }) => (
   <i aria-hidden="true" className={cn("inline-block size-2.5 shrink-0 rounded-sm", side === "a" ? "bg-team-a" : "bg-team-b")} />
 );
 
+/** True when any row has vlr.gg stats (VCT matches only); used to hide columns that would be empty. */
+export const hasVlr = (rows: (Row | null | undefined)[]) => rows.some((r) => r?.rating != null || r?.vlr_rating_rounds > 0);
+
 export const wl = (won: unknown) => (won ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400");
 
 const linkCls = "font-medium hover:underline underline-offset-4";

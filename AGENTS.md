@@ -42,9 +42,23 @@ src/web/          React UI shared by server and browser: app.tsx (page registry)
                   components/ui (shadcn), lib/, app.css (Tailwind v4 + theme tokens)
 src/client/       browser entry that hydrates the page (bundled to public/js)
 migrations/       D1 schema (SQL)
+scripts/          import-vlr.mjs (vlr.gg stats for VCT, see below), layout-audit.js, local helpers
 test/             synthetic-data tests
 .legacy-ui/       old UI, gitignored; do not edit
 ```
+
+### vlr.gg stats (VCT only)
+
+Rating, ACS, KAST, clutches, econ, buy-type win rates and map vetoes come from vlr.gg via the nrg-scrapbook scraper
+database (`db-snapshot` release). `node scripts/import-vlr.mjs` (remote by default; `--local --persist-to <dir>`,
+`--dry-run`) pairs each vlr match with a GRID series (same maps and scores within 36 h, and ≥6 of 10 players by name),
+writes the `vlr_*` columns on `game_players`/`game_teams` plus `vlr_series`, `vlr_maps`, `vlr_vetoes`, flags GRID maps
+whose score disagrees as `partial`, merges series GRID split in two (`status = 'duplicate'`), fixes series scores, and
+forces an aggregate rebuild. It is idempotent: re-run it after the scraper has new matches. Every vlr metric is marked
+`source: "vlr"` and its description ends "From vlr.gg; VCT matches only."; show those columns only when `hasVlr()` is true.
+
+Maps with `partial = 1` (GRID data stopped early) stay on match pages but every stats query and aggregate filters
+`partial = 0`. Keep that filter on any new query over `game_teams`/`game_players`.
 
 - `@/*` resolves to `src/web/*`.
 - Generated, gitignored output: `public/app.css`, `public/js/`, `public/fonts/`. Edit `src/web/app.css` and `src/client/`, never the built files.
@@ -70,7 +84,8 @@ leaderboard sort, and the About page's definitions. To add one:
 - No Riot art; agents and maps are text only. Team logos are shown by the owner's decision although ToS 9.3 grants no
   rights to team marks: only GRID's `Team.logoUrl`, processed by `src/ingest/logos.ts`, never hotlinked or taken from other sites.
 - No betting, odds, fantasy, or prediction-market features or links; no paywalls.
-- Data the Open Access tier does not provide (economy, trades, clutches, kill timelines, heatmaps, live data) cannot be added.
+- GRID's Open Access tier has no economy, trades, clutches, kill timelines, heatmaps or live data. For VCT matches,
+  economy, KAST and clutches come from vlr.gg (above), credited as such; Challengers matches have none of them.
 
 ## UI rules (no layout quirks)
 

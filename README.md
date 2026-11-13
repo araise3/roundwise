@@ -69,6 +69,20 @@ The cron starts importing immediately. Tuning lives in `wrangler.jsonc` → `var
 - `DELAY_HOURS`: Open Access data is delayed; matches are requested this long after their start.
 - `AGG_EVERY_HOURS`: how often leaderboard/map aggregates are rebuilt.
 
+### vlr.gg stats for VCT
+
+Rating, ACS, KAST, clutches, econ, buy-type win rates and map vetoes for VCT matches come from vlr.gg, scraped by
+[nrg-scrapbook](https://github.com/araise3/nrg-scrapbook). After a deploy (the migration must be applied) and whenever
+the scraper has new matches, run:
+
+```bash
+node scripts/import-vlr.mjs            # downloads the db-snapshot release, aligns it, writes to remote D1
+node scripts/import-vlr.mjs --dry-run  # alignment report + SQL file only
+```
+
+It also fixes GRID data with vlr.gg's: maps whose GRID score disagrees are marked incomplete and left out of stats,
+series GRID split in two are merged, and series scores are corrected. Challengers matches have no vlr.gg stats.
+
 ## Before going public: Open Access ToS checklist
 
 - [x] GRID logo + "Official Riot Esports Data powered by GRID" in the footer (ToS 9.5), plus the
@@ -86,6 +100,8 @@ The cron starts importing immediately. Tuning lives in `wrangler.jsonc` → `var
       They come from GRID (`Team.logoUrl`), are resized at import and served from this Worker. Remove them if GRID
       or a team objects. No Riot art is used; agents and maps are text only.
 - [ ] If GRID asks you to correct or remove player information, do it promptly (10.3).
+- [ ] vlr.gg stats (Rating, ACS, KAST, clutches, economy, vetoes) are credited on the About page and in every metric
+      definition. They are not GRID data, so GRID's licence doesn't cover them; remove them if vlr.gg objects.
 
 ## Layout
 
@@ -98,6 +114,7 @@ src/web/         React UI shared by server + browser: app.tsx (page registry), p
 src/client/      browser entry: hydrates the page (bundled to public/js)
 migrations/      D1 schema
 public/          built CSS, JS, fonts (generated), GRID logos
+scripts/         import-vlr.mjs (vlr.gg stats), layout-audit.js, local helpers
 test/            synthetic-data tests
 ```
 

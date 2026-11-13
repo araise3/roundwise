@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CompareTable, TeamWinConditions } from "@/components/charts";
 import {
-  DataTable, Empty, KV, Kpis, MapLink, metricCol, MetricKV, PageHeader, PeriodTabs, PlayerLink, Section, TeamBadge, TeamLink, wl, type Col,
+  DataTable, Empty, hasVlr, KV, Kpis, MapLink, metricCol, MetricKV, PageHeader, PeriodTabs, PlayerLink, Section, TeamBadge, TeamLink, wl, type Col,
 } from "@/components/site";
 import { date, fmt, title, eventName } from "@/lib/format";
 
@@ -44,6 +44,7 @@ export interface TeamPageData {
   byMap: Row[];
   roster: Row[];
   recent: Row[];
+  vetoes: Row[];
 }
 
 export function TeamPage({ d, period }: { d: TeamPageData; period: Period }) {
@@ -58,8 +59,15 @@ export function TeamPage({ d, period }: { d: TeamPageData; period: Period }) {
   const rosterCols: Col[] = [
     { key: "name", label: "Player", render: (r) => <PlayerLink id={r.player_id} name={r.name} /> },
     { key: "maps", label: "Maps", num: true },
+    ...(hasVlr(d.roster) ? [PM.rating, PM.acs, PM.kast] : []).map((m) => metricCol(m)),
     ...[PM.kpr, PM.adr, PM.dtr, PM.surv, PM.kas, PM.fk_pr, PM.fk_conv, PM.atk_kpr, PM.def_kpr, PM.mk_rate].map((m) => metricCol(m)),
   ];
+  const vetoCols: Col[] = [
+    { key: "map", label: "Map", render: (r) => <MapLink map={r.map} period={period} /> },
+    { key: "picks", label: "Picked", num: true },
+    { key: "bans", label: "Banned", num: true },
+  ];
+  const economy = hasData && s.vlr_eco_rounds + s.vlr_fullbuy_rounds > 0;
   const recentCols: Col[] = [
     { key: "start_time", label: "Date", render: (r) => <a className="text-muted-foreground hover:underline" href={`/match/${r.series_id}`}>{date(r.start_time)}</a> },
     { key: "opp_name", label: "Opponent", render: (r) => <TeamLink id={r.opponent_id} name={r.opp_name} /> },
@@ -111,6 +119,21 @@ export function TeamPage({ d, period }: { d: TeamPageData; period: Period }) {
               <MetricKV m={TM.team_adr} r={s} /><MetricKV m={TM.dmg_ratio} r={s} />
             </Section>
           </div>
+          {(economy || d.vetoes.length > 0) && (
+            <div className="grid items-start gap-4 md:grid-cols-2">
+              {economy && (
+                <Section title="Economy" description="By the team's own buy, pistol rounds excluded · VCT matches, from vlr.gg" flush>
+                  <MetricKV m={TM.eco_wr} r={s} /><MetricKV m={TM.semieco_wr} r={s} /><MetricKV m={TM.semibuy_wr} r={s} />
+                  <MetricKV m={TM.fullbuy_wr} r={s} /><MetricKV m={TM.antieco_wr} r={s} />
+                </Section>
+              )}
+              {d.vetoes.length > 0 && (
+                <Section title="Map veto" description="Picks and bans · VCT matches, from vlr.gg" flush>
+                  <DataTable cols={vetoCols} rows={d.vetoes} />
+                </Section>
+              )}
+            </div>
+          )}
           <Section title="Map pool" description={`${d.byMap.length} maps`} flush><DataTable cols={mapCols} rows={d.byMap} /></Section>
           <Section title="Roster" description={`${d.roster.length} players`} flush><DataTable cols={rosterCols} rows={d.roster} /></Section>
         </div>

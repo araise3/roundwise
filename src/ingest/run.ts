@@ -242,19 +242,19 @@ export async function refreshAggregates(db: D1Database, now = new Date()) {
            SUM(CASE WHEN won = 1 AND max_deficit >= 5 THEN 1 ELSE 0 END),
            SUM(CASE WHEN won = 0 AND max_lead >= 5 THEN 1 ELSE 0 END),
            SUM(overtime * won), ${sumSelect(TEAM_SUM_COLS)}
-         FROM game_teams WHERE start_time >= ? GROUP BY team_id`,
+         FROM game_teams WHERE start_time >= ? AND partial = 0 GROUP BY team_id`,
       ).bind(period, cutoff),
       db.prepare("DELETE FROM agg_players WHERE period = ?").bind(period),
       db.prepare(
         `INSERT INTO agg_players (period, player_id, maps, map_wins, ${playerCols})
          SELECT ?, player_id, COUNT(*), SUM(won), ${sumSelect(PLAYER_SUM_COLS)}
-         FROM game_players WHERE start_time >= ? GROUP BY player_id`,
+         FROM game_players WHERE start_time >= ? AND partial = 0 GROUP BY player_id`,
       ).bind(period, cutoff),
       db.prepare("DELETE FROM agg_maps WHERE period = ?").bind(period),
       db.prepare(
         `INSERT INTO agg_maps (period, map, maps, ot_maps, ${teamCols})
          SELECT ?, map, COUNT(*) / 2, SUM(overtime) / 2, ${sumSelect(TEAM_SUM_COLS)}
-         FROM game_teams WHERE start_time >= ? GROUP BY map`,
+         FROM game_teams WHERE start_time >= ? AND partial = 0 GROUP BY map`,
       ).bind(period, cutoff),
     );
   }

@@ -172,9 +172,25 @@ export function About({ siteName }: { siteName: string }) {
               <p>Pistol rounds are rounds 1 and 13. Overtime is any round after 24. “Comeback” and “blown lead” use a 5-round margin.</p>
             </div>
           </Section>
-          <Section title="What the data can't show" flush>
-            <KV label="Economy / buy types" value="Not available" />
-            <KV label="Trades and clutches (kill order)" value="Not available" />
+          <Section title="Data sources">
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                Round-level data for every match comes from GRID (Official Riot Esports Data). ADR and damage count damage to
+                health only, so they read lower than sites that also count damage absorbed by armor.
+              </p>
+              <p>
+                For VCT matches (leagues, Masters, Champions), Rating, ACS, KAST, clutches, econ rating, buy-type win rates and map
+                vetoes come from <a className="underline" href="https://www.vlr.gg">vlr.gg</a>. Challengers matches don&apos;t have them.
+              </p>
+              <p>
+                Maps where GRID&apos;s data stops before the end are marked “Incomplete data” on the match page and left out of all
+                stats; where vlr.gg has the map, its final score is shown.
+              </p>
+            </div>
+          </Section>
+          <Section title="What the data can't show" flush className="md:col-span-2">
+            <KV label="Economy / buy types" value="VCT only (vlr.gg)" />
+            <KV label="Trades and clutches" value="VCT only (vlr.gg)" />
             <KV label="Positions / heatmaps" value="Last position only" />
             <KV label="Live data" value="Delayed a few hours" />
           </Section>

@@ -14,9 +14,15 @@ export interface Metric {
   desc: string;
   /** false when lower is better (used for leaderboard default sort direction) */
   higherIsBetter?: boolean;
+  /** Third-party source shown with the metric. GRID metrics have none. */
+  source?: "vlr";
 }
 
 const ratio = (num: string, den: string) => `(1.0 * (${num}) / NULLIF(${den}, 0))`;
+
+const VLR_NOTE = " From vlr.gg; VCT matches only.";
+/** Mark a metric as coming from vlr.gg (VCT only). */
+const vlr = <M extends Metric>(m: M): M => ({ ...m, desc: m.desc + VLR_NOTE, source: "vlr" });
 
 export const TEAM_METRICS = [
   { key: "map_wr", label: "Map win rate", short: "Map W%", sql: ratio("map_wins", "maps"), fmt: "pct", desc: "Maps won / maps played." },
@@ -49,15 +55,23 @@ export const TEAM_METRICS = [
   { key: "ot_wr", label: "Overtime win rate", short: "OT W%", sql: ratio("ot_wins", "overtime"), fmt: "pct", desc: "Maps won among maps that went to overtime." },
   { key: "team_adr", label: "Team damage per round", short: "Team ADR", sql: ratio("damage", "rounds"), fmt: "dec1", desc: "Total team damage dealt per round." },
   { key: "dmg_ratio", label: "Damage ratio", short: "Dmg ratio", sql: ratio("damage", "damage_taken"), fmt: "dec2", desc: "Damage dealt / damage taken." },
+  vlr({ key: "eco_wr", label: "Eco round win rate", short: "Eco%", sql: ratio("vlr_eco_wins", "vlr_eco_rounds"), fmt: "pct", desc: "Rounds won on an eco (loadout under 5k), pistol rounds excluded." }),
+  vlr({ key: "semieco_wr", label: "Semi-eco win rate", short: "Semi-eco%", sql: ratio("vlr_semieco_wins", "vlr_semieco_rounds"), fmt: "pct", desc: "Rounds won on a semi-eco (5k–10k loadout)." }),
+  vlr({ key: "semibuy_wr", label: "Semi-buy win rate", short: "Semi-buy%", sql: ratio("vlr_semibuy_wins", "vlr_semibuy_rounds"), fmt: "pct", desc: "Rounds won on a semi-buy (10k–20k loadout)." }),
+  vlr({ key: "fullbuy_wr", label: "Full-buy win rate", short: "Full-buy%", sql: ratio("vlr_fullbuy_wins", "vlr_fullbuy_rounds"), fmt: "pct", desc: "Rounds won on a full buy (20k+ loadout)." }),
+  vlr({ key: "antieco_wr", label: "Anti-eco win rate", short: "Anti-eco%", sql: ratio("vlr_antieco_wins", "vlr_antieco_rounds"), fmt: "pct", desc: "Rounds won with a semi-buy or full buy against an opponent on an eco." }),
 ] satisfies Metric[];
 
 export const PLAYER_METRICS = [
+  vlr({ key: "rating", label: "Rating", short: "Rating", sql: ratio("vlr_rating", "vlr_rating_rounds"), fmt: "dec2", desc: "VLR.gg rating per map, averaged weighted by rounds." }),
+  vlr({ key: "acs", label: "Average combat score", short: "ACS", sql: ratio("vlr_acs", "vlr_acs_rounds"), fmt: "int", desc: "Riot's combat score per round (damage, kills by enemies left alive, multi-kills, assists)." }),
+  vlr({ key: "kast", label: "KAST", short: "KAST%", sql: ratio("vlr_kast", "vlr_kast_rounds"), fmt: "pct", desc: "Rounds with a kill, assist, survival or trade." }),
   { key: "kpr", label: "Kills per round", short: "KPR", sql: ratio("kills", "rounds"), fmt: "dec2", desc: "Kills / rounds." },
   { key: "adr", label: "Damage per round", short: "ADR", sql: ratio("damage", "rounds"), fmt: "dec1", desc: "Damage dealt / rounds." },
   { key: "dtr", label: "Damage taken per round", short: "DTR", sql: ratio("damage_taken", "rounds"), fmt: "dec1", desc: "Damage received / rounds. Lower usually means better positioning or a passive role.", higherIsBetter: false },
   { key: "dmg_ratio", label: "Damage ratio", short: "Dmg ±", sql: ratio("damage", "damage_taken"), fmt: "dec2", desc: "Damage dealt / damage taken." },
   { key: "surv", label: "Survival rate", short: "Surv%", sql: ratio("survived", "rounds"), fmt: "pct", desc: "Rounds the player was alive at round end." },
-  { key: "kas", label: "KAS", short: "KAS%", sql: ratio("kas_rounds", "rounds"), fmt: "pct", desc: "Rounds with a kill, assist, or survival. Trades aren't in the data, so this is KAST without the T." },
+  { key: "kas", label: "KAS", short: "KAS%", sql: ratio("kas_rounds", "rounds"), fmt: "pct", desc: "Rounds with a kill, assist, or survival. GRID has no kill order, so trades are missing: this is KAST without the T (see KAST for VCT matches)." },
   { key: "fk_pr", label: "First kills per round", short: "FK/R", sql: ratio("fk", "rounds"), fmt: "dec2", desc: "Opening kills / rounds." },
   { key: "fk_conv", label: "Round win rate after own first kill", short: "FK→W", sql: ratio("fk_wins", "fk"), fmt: "pct", desc: "How often the team converted the round when this player got the opening kill." },
   { key: "atk_kpr", label: "Attack kills per round", short: "ATK KPR", sql: ratio("atk_kills", "atk_rounds"), fmt: "dec2", desc: "Kills per attack round." },
@@ -72,6 +86,11 @@ export const PLAYER_METRICS = [
   { key: "pistol_kpr", label: "Pistol kills per round", short: "Pistol KPR", sql: ratio("pistol_kills", "pistol_rounds"), fmt: "dec2", desc: "Kills per pistol round (1 and 13)." },
   { key: "pistol_surv", label: "Pistol survival rate", short: "Pistol surv", sql: ratio("pistol_survived", "pistol_rounds"), fmt: "pct", desc: "Alive at the end of pistol rounds." },
   { key: "hs", label: "Headshot kills", short: "HS%", sql: ratio("headshots", "kills"), fmt: "pct", desc: "GRID 'headshots' / kills." },
+  vlr({ key: "atk_rating", label: "Attack rating", short: "ATK Rtg", sql: ratio("vlr_atk_rating", "vlr_atk_rounds"), fmt: "dec2", desc: "VLR.gg rating on attack halves." }),
+  vlr({ key: "def_rating", label: "Defense rating", short: "DEF Rtg", sql: ratio("vlr_def_rating", "vlr_def_rounds"), fmt: "dec2", desc: "VLR.gg rating on defense halves." }),
+  vlr({ key: "clutch_rate", label: "Clutches per 100 rounds", short: "CL/100", sql: `(100.0 * vlr_clutches / NULLIF(vlr_perf_rounds, 0))`, fmt: "dec1", desc: "Clutches won (1vX) per 100 rounds." }),
+  vlr({ key: "clutches", label: "Clutches won", short: "Clutches", sql: "vlr_clutches", fmt: "int", desc: "1v1 to 1v5 rounds won as the last player alive." }),
+  vlr({ key: "econ", label: "Econ rating", short: "Econ", sql: ratio("vlr_econ", "vlr_perf_rounds"), fmt: "int", desc: "Damage per 1,000 credits spent." }),
 ] satisfies Metric[];
 
 export const MAP_METRICS = [
@@ -87,6 +106,8 @@ export const MAP_METRICS = [
   { key: "boom_share", label: "Rounds decided by detonation", short: "Boom%", sql: ratio("win_boom_atk", "atk_rounds"), fmt: "pct", desc: "Rounds that ended with the spike exploding." },
   { key: "defuse_share", label: "Rounds decided by defuse", short: "Defuse%", sql: ratio("win_defuse_def", "atk_rounds"), fmt: "pct", desc: "Rounds that ended in a defuse." },
   { key: "flawless", label: "Flawless rounds", short: "Flawless%", sql: ratio("flawless", "atk_rounds"), fmt: "pct", desc: "Rounds won without losing a player." },
+  vlr({ key: "eco_wr", label: "Eco round win rate", short: "Eco%", sql: ratio("vlr_eco_wins", "vlr_eco_rounds"), fmt: "pct", desc: "Rounds won by the team on an eco (under 5k), pistols excluded." }),
+  vlr({ key: "antieco_wr", label: "Anti-eco win rate", short: "Anti-eco%", sql: ratio("vlr_antieco_wins", "vlr_antieco_rounds"), fmt: "pct", desc: "Rounds won with a semi-buy or full buy against an eco." }),
 ] satisfies Metric[];
 
 export type TeamMetricKey = (typeof TEAM_METRICS)[number]["key"];
