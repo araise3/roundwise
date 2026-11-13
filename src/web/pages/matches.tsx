@@ -37,7 +37,7 @@ const SERIES_COLS: Col[] = [
   { key: "t1_name", label: "Team", pin: true, minW: 110, className: "text-right",
     render: (s) => (
       <span className={cn("inline-flex items-center justify-end gap-2", s.winner_id !== s.team1_id && "text-muted-foreground")}>
-        <TeamLink id={s.team1_id} name={s.t1_name} /><span className="hidden sm:contents"><TeamBadge id={s.team1_id} side="a" /></span>
+        <TeamLink id={s.team1_id} name={s.t1_name} /><span className="hidden sm:contents"><TeamBadge id={s.team1_id} /></span>
       </span>
     ) },
   { key: "score", label: "Score", pin: true, noSort: true, className: "text-center",
@@ -51,7 +51,7 @@ const SERIES_COLS: Col[] = [
   { key: "t2_name", label: "Team", pin: true, minW: 110,
     render: (s) => (
       <span className={cn("inline-flex items-center gap-2", s.winner_id !== s.team2_id && "text-muted-foreground")}>
-        <span className="hidden sm:contents"><TeamBadge id={s.team2_id} side="b" /></span><TeamLink id={s.team2_id} name={s.t2_name} />
+        <span className="hidden sm:contents"><TeamBadge id={s.team2_id} /></span><TeamLink id={s.team2_id} name={s.t2_name} />
       </span>
     ) },
   { key: "maps", label: "Maps", priority: 4, noSort: true, render: (s) => <span className="text-muted-foreground">{mapScores(s)}</span> },
@@ -126,7 +126,7 @@ export function SeriesDetail({ data }: { data: { series: Row; games: Row[]; vlrM
         title={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className={cn("inline-flex items-center gap-2", !t1 && "text-muted-foreground")}>
-              <TeamBadge id={s.team1_id} side="a" size="lg" /><TeamLink id={s.team1_id} name={s.t1_name} />
+              <TeamBadge id={s.team1_id} size="lg" /><TeamLink id={s.team1_id} name={s.t1_name} />
             </span>
             <span className="rounded-md border px-2 font-mono tabular-nums">
               <span className={t1 ? "" : "text-muted-foreground"}>{s.team1_score}</span>
@@ -134,7 +134,7 @@ export function SeriesDetail({ data }: { data: { series: Row; games: Row[]; vlrM
               <span className={t2 ? "" : "text-muted-foreground"}>{s.team2_score}</span>
             </span>
             <span className={cn("inline-flex items-center gap-2", !t2 && "text-muted-foreground")}>
-              <TeamLink id={s.team2_id} name={s.t2_name} /><TeamBadge id={s.team2_id} side="b" size="lg" />
+              <TeamLink id={s.team2_id} name={s.t2_name} /><TeamBadge id={s.team2_id} size="lg" />
             </span>
           </span>
         }
@@ -204,7 +204,7 @@ export function SeriesDetail({ data }: { data: { series: Row; games: Row[]; vlrM
               </div>
               {[ta, tb].filter(Boolean).map((t) => (
                 <Section key={t.team_id} flush description={vlr ? `${title(g.map)} · Rating, ACS and KAST from vlr.gg` : title(g.map)}
-                  title={<span className="inline-flex items-center gap-2"><TeamBadge id={t.team_id} side={t.team_id === teamA ? "a" : "b"} />{names[t.team_id]}</span>}>
+                  title={<span className="inline-flex items-center gap-2"><TeamBadge id={t.team_id} />{names[t.team_id]}</span>}>
                   <DataTable cols={playerCols(vlr)} rows={g.players.filter((p: Row) => p.team_id === t.team_id)} />
                 </Section>
               ))}

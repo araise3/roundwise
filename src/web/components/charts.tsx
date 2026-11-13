@@ -5,7 +5,7 @@ import type { Row } from "../../stats/queries";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fmt, WIN_TYPE } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { flushTable, Hint, Section, TeamBadge } from "./site";
+import { flushTable, Hint, Section, Swatch, TeamBadge } from "./site";
 
 /** Colours for how a round ended. */
 export const WT = {
@@ -85,9 +85,13 @@ export function CompareTable({ a, b, rows }: { a: Team; b: Team; rows: CmpRow[] 
       <TableHeader>
         <TableRow>
           <TableHead>Metric</TableHead>
-          <TableHead className="text-right" title={a.name}><TeamBadge id={a.id} side="a" /><span className="sr-only">{a.name}</span></TableHead>
+          <TableHead className="text-right" title={a.name}>
+            <span className="inline-flex items-center gap-1.5"><Swatch side="a" /><TeamBadge id={a.id} /></span><span className="sr-only">{a.name}</span>
+          </TableHead>
           <TableHead className="hidden w-full min-w-12 sm:table-cell" />
-          <TableHead title={b.name}><TeamBadge id={b.id} side="b" /><span className="sr-only">{b.name}</span></TableHead>
+          <TableHead title={b.name}>
+            <span className="inline-flex items-center gap-1.5"><TeamBadge id={b.id} /><Swatch side="b" /></span><span className="sr-only">{b.name}</span>
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

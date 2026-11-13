@@ -100,8 +100,8 @@ Every page must look tidy at 375, 768, 1280 and 1600 px wide, in light and dark 
 - Nothing scrolls sideways, spills out of its card, or is clipped before hydration (DataTable hides optional
   columns on phones until it has measured what fits).
 - Show tournament names through `eventName()` ("Champions Shanghai · Playoffs"), never the raw GRID string.
-- Show teams with `TeamBadge` (logo, or initials tile when there is none; `side` adds the A/B colour ring). In two-team
-  comparisons (`CompareTable`) the headers are badges; put full team names in the Section description.
+- Show teams with `TeamBadge` (logo, or initials tile when there is none; no rings or borders). In two-team
+  comparisons (`CompareTable`) the headers are badges with an A/B `Swatch`; put full team names in the Section description.
 - Logos need light- and dark-mode versions: `/logo/:id/light|dark`. Liquipedia provides both; GRID's single logo (and any image
   still hard to see in a mode) gets a contrasting tile automatically. `teams.logo_ref` records which Liquipedia files were used.
 

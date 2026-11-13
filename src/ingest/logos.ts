@@ -18,6 +18,7 @@ export const TILE_ON_DARK = "#f5f5f5";  // light tile behind dark logos in dark 
 const ANALYSE = 48;   // px used to measure contrast
 const RECHECK = 30 * DAY; // teams on the GRID fallback (or with no logo) are looked up on Liquipedia again
 const LOCK_MS = 3 * 60_000;
+const BACKOFF_MS = 15 * 60_000; // pause after a Liquipedia 429
 
 const lin = (c: number) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
 const luminance = (r: number, g: number, b: number) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
@@ -88,8 +89,14 @@ export async function refreshLogos(env: Env, now: Date): Promise<number> {
   const db = env.DB;
   const contact = (env as { LIQUIPEDIA_CONTACT?: string }).LIQUIPEDIA_CONTACT;
   const lp = contact ? new LiquipediaClient(contact) : null;
+  if (lp) {
+    // After a Liquipedia 429, pause all logo work (not just Liquipedia) so teams don't fall back to GRID meanwhile.
+    const until = await db.prepare("SELECT value FROM meta WHERE key = 'liquipedia_backoff'").first<{ value: string }>();
+    if (until && until.value > now.toISOString()) return 0;
+  }
+  let locked = false;
   try {
-    if (!(await lock(db, now))) return 0;
+    if (!(locked = await lock(db, now))) return 0;
     const due = await db.prepare(
       `SELECT id, name, logo_url FROM teams
        WHERE logo_status IS NULL
@@ -137,16 +144,22 @@ export async function refreshLogos(env: Env, now: Date): Promise<number> {
         }
         done++;
       } catch (e) {
-        if (e instanceof LiquipediaRateLimited) { console.warn("logos: Liquipedia rate limit, stopping"); break; }
+        if (e instanceof LiquipediaRateLimited) {
+          console.warn("logos: Liquipedia rate limit, pausing logo work for 15 min");
+          await db.prepare("INSERT INTO meta (key, value) VALUES ('liquipedia_backoff', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            .bind(new Date(now.getTime() + BACKOFF_MS).toISOString()).run();
+          break;
+        }
         console.warn("logo", id, String(e));
         // Keep whatever images the team already has; retry in a week.
         await db.prepare("UPDATE teams SET logo_status = 'error', logo_checked_at = ? WHERE id = ?").bind(nowIso, id).run();
       }
     }
-    await db.prepare("DELETE FROM meta WHERE key = 'logo_lock'").run();
     return done;
   } catch (e) {
     console.warn("refreshLogos", String(e));
     return 0;
+  } finally {
+    if (locked) await db.prepare("DELETE FROM meta WHERE key = 'logo_lock'").run().catch(() => {});
   }
 }

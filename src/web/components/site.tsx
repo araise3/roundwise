@@ -124,15 +124,10 @@ export const MetricKV = ({ m, r }: { m: Metric; r: Row | null }) => <KV label={m
 
 /**
  * Team logo (light- and dark-mode versions from /logo/:id/:mode; an initials tile when the team has none).
- * `side` adds the team A/B colour as a ring so it still matches swatches and comparison bars.
+ * Where team A/B colours matter (comparison bars), put a `Swatch` next to it.
  */
-export const TeamBadge = ({ id, side, size = "sm" }: { id: string; name?: string; side?: "a" | "b"; size?: "sm" | "lg" }) => (
-  <span aria-hidden="true" className={cn(
-    "inline-flex shrink-0 overflow-hidden rounded-md align-middle",
-    size === "lg" ? "size-8" : "size-5",
-    side && "ring-2 ring-offset-1 ring-offset-background",
-    side === "a" && "ring-team-a", side === "b" && "ring-team-b",
-  )}>
+export const TeamBadge = ({ id, size = "sm" }: { id: string; size?: "sm" | "lg" }) => (
+  <span aria-hidden="true" className={cn("inline-flex shrink-0 overflow-hidden rounded-md align-middle", size === "lg" ? "size-8" : "size-5")}>
     <img src={`/logo/${id}/light`} alt="" width={96} height={96} loading="lazy" decoding="async" className="size-full object-contain dark:hidden" />
     <img src={`/logo/${id}/dark`} alt="" width={96} height={96} loading="lazy" decoding="async" className="hidden size-full object-contain dark:block" />
   </span>
