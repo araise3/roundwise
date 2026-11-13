@@ -58,9 +58,9 @@ The cron starts importing immediately. Tuning lives in `wrangler.jsonc` → `var
 
 - `BACKFILL_FROM`: earliest match date to import. Which tournaments are imported (VCT, Masters, Champions, LCQs,
   Challengers/VCL; not Game Changers or open qualifiers) is defined in `src/ingest/scope.ts`.
-- `BATCH_SIZE`: matches fetched per 10-minute run. Each match writes ~100 D1 rows; the
-  D1 free tier allows 100k rows written/day, so the default (6 → ~860 matches/day) stays under it.
-  On the Workers paid plan you can raise this a lot.
+- `BATCH_SIZE`: matches fetched per 10-minute run. Each match writes ~100 D1 rows. The default (40 → up to
+  ~5,700 matches/day) assumes the Workers Paid plan. On the free plan use 6: D1 free allows 100k rows written/day
+  and a Worker run only 50 subrequests. GRID rate limits are handled: a 429 ends the batch and the next run resumes.
 - `DELAY_HOURS`: Open Access data is delayed; matches are requested this long after their start.
 - `AGG_EVERY_HOURS`: how often leaderboard/map aggregates are rebuilt.
 

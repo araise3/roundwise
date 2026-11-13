@@ -16,8 +16,8 @@ import { transformSeries } from "./transform";
 
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
-// 50 series per page. Keeps discovery + BATCH_SIZE state calls well under the 50-subrequest
-// limit of the Workers free plan while catching up a long backfill in a few runs.
+// 50 series per page. Discovery pages + BATCH_SIZE state calls (~4 subrequests per series incl. D1)
+// must stay under the per-run subrequest limit (1000 on Workers Paid, 50 on free).
 const MAX_DISCOVERY_PAGES = 10;
 const RESCAN_WINDOW = 2 * DAY; // keep re-reading recent days so reschedules are picked up
 

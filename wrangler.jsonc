@@ -14,8 +14,9 @@
     // Earliest match date to import. Which tournaments are imported is set in src/ingest/scope.ts.
     "BACKFILL_FROM": "2026-01-01T00:00:00Z",
     // Series fetched from the Series State API per 10-minute cron run.
-    // ~100 D1 rows are written per series; D1 free tier allows 100k rows written/day.
-    "BATCH_SIZE": "6",
+    // ~100 D1 rows are written per series. Sized for the Workers Paid plan (50M D1 rows written/month,
+    // 1000 subrequests per run); on the free plan (100k rows/day, 50 subrequests) use 6.
+    "BATCH_SIZE": "40",
     // Open Access data is delayed; don't ask for a series until this long after its scheduled start.
     "DELAY_HOURS": "4",
     // Rebuild leaderboard / map aggregates at most this often (they scan all stored maps).
