@@ -90,7 +90,7 @@ export const Kpi = ({ label, value, hint }: { label: ReactNode; value: ReactNode
   <Card className="gap-1 py-4">
     <CardContent className="px-4">
       <div className="text-xs text-muted-foreground"><Hint text={hint}>{label}</Hint></div>
-      <div className="font-mono text-2xl font-semibold tabular-nums">{value}</div>
+      <div className="truncate font-mono text-lg font-semibold tabular-nums sm:text-2xl">{value}</div>
     </CardContent>
   </Card>
 );
@@ -98,8 +98,8 @@ export const Kpi = ({ label, value, hint }: { label: ReactNode; value: ReactNode
 /** Label / value row for definition-style lists inside a flush Section. */
 export const KV = ({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) => (
   <div className="flex items-center justify-between gap-4 border-b px-4 py-2 text-sm last:border-b-0 sm:px-6">
-    <span className="text-muted-foreground"><Hint text={hint}>{label}</Hint></span>
-    <span className="font-mono font-medium tabular-nums">{value}</span>
+    <span className="min-w-0 text-muted-foreground"><Hint text={hint}>{label}</Hint></span>
+    <span className="shrink-0 whitespace-nowrap font-mono font-medium tabular-nums">{value}</span>
   </div>
 );
 

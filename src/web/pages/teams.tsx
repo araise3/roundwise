@@ -11,7 +11,7 @@ import { CompareTable, TeamWinConditions } from "@/components/charts";
 import {
   DataTable, Empty, KV, Kpis, MapLink, metricCol, MetricKV, PageHeader, PeriodTabs, PlayerLink, Section, TeamBadge, TeamLink, wl, type Col,
 } from "@/components/site";
-import { date, fmt, title } from "@/lib/format";
+import { date, fmt, title, eventName } from "@/lib/format";
 
 const TM = byKey(TEAM_METRICS);
 const PM = byKey(PLAYER_METRICS);
@@ -70,7 +70,7 @@ export function TeamPage({ d, period }: { d: TeamPageData; period: Period }) {
     { key: "def", label: "DEF", num: true, sortBy: (r) => r.def_wins / (r.def_rounds || 1), render: (r) => `${r.def_wins}/${r.def_rounds}` },
     { key: "pistols", label: "Pistols", num: true, sortBy: (r) => r.pistol_wins, render: (r) => `${r.pistol_wins}/${r.pistol_rounds}` },
     { key: "lead", label: "Max lead / deficit", num: true, sortBy: (r) => r.max_lead, render: (r) => `+${r.max_lead} / −${r.max_deficit}` },
-    { key: "tournament", label: "Event", render: (r) => <span className="text-muted-foreground">{r.tournament}</span> },
+    { key: "tournament", label: "Event", render: (r) => <span className="text-muted-foreground" title={r.tournament}>{eventName(r.tournament)}</span> },
   ];
 
   return (
@@ -171,7 +171,7 @@ export function ComparePage({ teams, a, b, sa, sb, period }: {
         <Button type="submit">Compare</Button>
       </form>
       {ready ? (
-        <Section title="Head to head" description="Higher value is bold." flush>
+        <Section title="Head to head" description={`${a.name} vs ${b.name} · higher value is bold`} flush>
           <CompareTable a={a.name} b={b.name} rows={[
             ...VS_METRICS.map((m) => ({ label: m.label, a: sa[m.key], b: sb[m.key], f: m.fmt, desc: m.desc })),
             { label: "Comebacks (from −5)", a: sa.comebacks, b: sb.comebacks, f: "int" as const },

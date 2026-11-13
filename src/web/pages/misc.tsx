@@ -28,19 +28,17 @@ function Leaders({ title, rows, m, kind }: { title: string; rows: Row[]; m: Metr
     <Section title={<Hint text={m.desc}>{title}</Hint>} description="Last 90 days"
       action={<Button asChild variant="ghost" size="sm"><a href={`/leaderboards?kind=${kind}s&sort=${m.key}`}>All<ArrowRight /></a></Button>} flush>
       {rows.length ? (
-        <Table className={flushTable}>
-          <TableBody>
-            {rows.map((r, i) => (
-              <TableRow key={i}>
-                <TableCell className="w-8 text-muted-foreground font-mono tabular-nums">{i + 1}</TableCell>
-                <TableCell className="max-w-0 truncate">
-                  {kind === "team" ? <TeamLink id={r.team_id} name={r.name} /> : <PlayerLink id={r.player_id} name={r.name} />}
-                </TableCell>
-                <TableCell className="text-right font-mono tabular-nums">{fmt(r[m.key], m.fmt)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <ol className="text-sm">
+          {rows.map((r, i) => (
+            <li key={i} className="flex items-center gap-3 border-b px-4 py-2 last:border-b-0 sm:px-6">
+              <span className="w-4 shrink-0 font-mono text-muted-foreground tabular-nums">{i + 1}</span>
+              <span className="min-w-0 flex-1 truncate" title={r.name}>
+                {kind === "team" ? <TeamLink id={r.team_id} name={r.name} /> : <PlayerLink id={r.player_id} name={r.name} />}
+              </span>
+              <span className="shrink-0 font-mono tabular-nums">{fmt(r[m.key], m.fmt)}</span>
+            </li>
+          ))}
+        </ol>
       ) : <Empty>Builds after the next aggregate run.</Empty>}
     </Section>
   );
@@ -54,12 +52,12 @@ export function Home({ siteName, recent, spot, status }: HomeProps) {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <Kpi label="Matches analysed" value={status.counts.done ?? 0} />
           <Kpi label="Queued" value={status.counts.pending ?? 0} />
+          <Kpi label="Latest match" value={date(recent[0]?.start_time)} />
           <Kpi label="Last update" value={date(status.lastIngest)} />
-          <Kpi label="Search" value={<span className="text-sm font-normal text-muted-foreground">Press / or Ctrl K</span>} />
         </div>
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <Section title="Latest results" action={<Button asChild variant="ghost" size="sm"><a href="/matches">All matches<ArrowRight /></a></Button>} flush>
-            <SeriesTable rows={recent} />
+            <SeriesTable rows={recent} compact />
           </Section>
           <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-1">
             <Leaders title="Win % after first kill" rows={spot.fkTeams} m={TM.fk_conv} kind="team" />
@@ -158,7 +156,7 @@ export function About({ siteName }: { siteName: string }) {
   const cols: Col[] = [
     { key: "short", label: "Column", render: (r) => <span className="font-mono">{r.short}</span> },
     { key: "label", label: "Metric", minW: 130 },
-    { key: "desc", label: "Definition", minW: 160, pin: true, render: (r) => <span className="text-muted-foreground">{r.desc}</span> },
+    { key: "desc", label: "Definition", minW: 160, prose: true, pin: true, render: (r) => <span className="text-muted-foreground">{r.desc}</span> },
   ];
   return (
     <>

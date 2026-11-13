@@ -92,13 +92,10 @@ export function PlayerPage({ d, period }: { d: PlayerPageData; period: Period })
           <Kpis row={s} metrics={[PM.kpr, PM.adr, PM.kas, PM.surv, PM.fk_pr, PM.fk_conv, PM.dtr, PM.dmg_ratio]} />
           <div className="grid gap-4 lg:grid-cols-3">
             <Section title="Side split" flush className="lg:col-span-2"><DataTable cols={splitCols} rows={splits} /></Section>
-            <Section title="Multi-kills" description="Rounds with N kills">
-              <BarList items={[
-                { label: "2K", value: s.mk2, sub: `${fmt(div(s.mk2 * 100, s.rounds), "dec1")}/100r` },
-                { label: "3K", value: s.mk3, sub: `${fmt(div(s.mk3 * 100, s.rounds), "dec1")}/100r` },
-                { label: "4K", value: s.mk4 },
-                { label: "Ace", value: s.mk5 },
-              ]} />
+            <Section title="Multi-kills" description="Rounds with N kills · per 100 rounds">
+              <BarList items={([["2K", s.mk2], ["3K", s.mk3], ["4K", s.mk4], ["Ace", s.mk5]] as const).map(([label, n]) => (
+                { label, value: n, sub: fmt(div(n * 100, s.rounds), "dec1") }
+              ))} />
             </Section>
           </div>
           <Section title="Weapon mix" description={`${totalWeaponKills} kills`}>

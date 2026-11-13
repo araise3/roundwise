@@ -30,8 +30,13 @@ export interface Col {
   pin?: boolean;
   /** Lower = kept longer when the table is too narrow. Defaults to the column's position. */
   priority?: number;
-  /** Wrapping column: budget this width instead of its one-line width. */
+  /**
+   * May wrap, but only as a last resort: if the always-shown columns don't fit on one line,
+   * this column is budgeted at `minW` and wraps. Otherwise it stays on one line.
+   */
   minW?: number;
+  /** Long text (definitions) that always wraps; budgeted at `minW`. */
+  prose?: boolean;
 }
 
 export const metricCol = (m: Metric, sortable = false): Col => ({ key: m.key, label: m.short, hint: m.desc, fmt: m.fmt, num: true, sortable });
@@ -59,39 +64,46 @@ const isPinned = (c: Col, i: number) => c.pin ?? i === 0;
  */
 function useFitColumns(cols: Col[], keep: string | undefined, forced: Record<string, boolean>) {
   const wrap = useRef<HTMLDivElement>(null);
-  const [natural, setNatural] = useState<number[] | null>(null);
+  const [measured, setMeasured] = useState<number[] | null>(null);
   const [avail, setAvail] = useState<number | null>(null);
 
   useLayoutEffect(() => {
     const el = wrap.current;
     const table = el?.querySelector("table");
-    if (!el || !table || natural) return;
+    if (!el || !table || measured) return;
+    // One-line width of every column: unwrap minW columns while measuring.
     const prev = table.style.width;
     table.style.width = "max-content";
+    table.dataset.measuring = "";
     const widths = [...table.querySelectorAll("thead th")].map((th) => Math.ceil(th.getBoundingClientRect().width));
+    delete table.dataset.measuring;
     table.style.width = prev;
-    setNatural(widths.map((w, i) => cols[i]?.minW ?? w));
+    setMeasured(widths);
     setAvail(el.clientWidth);
-  }, [natural, cols]);
+  }, [measured, cols]);
 
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
     const ro = new ResizeObserver(() => setAvail(el.clientWidth));
     ro.observe(el);
-    document.fonts?.ready.then(() => setNatural(null));
+    document.fonts?.ready.then(() => setMeasured(null));
     return () => ro.disconnect();
   }, []);
 
-  const visible = useMemo(() => {
-    if (!natural || avail === null || natural.length !== cols.length) return new Set(cols.map((c) => c.key));
+  const { visible, squeeze } = useMemo(() => {
+    if (!measured || avail === null || measured.length !== cols.length) return { visible: new Set(cols.map((c) => c.key)), squeeze: false };
     const must = (c: Col, i: number) => isPinned(c, i) || forced[c.key] === true || c.key === keep;
+    const budget = avail - 24; // first/last-column edge padding shifts when columns drop
+    const oneLine = (c: Col, i: number) => (c.prose ? (c.minW ?? measured[i]) : measured[i]);
+    // Wrap minW columns only if the must-show columns don't fit on one line.
+    const squeeze = cols.reduce((n, c, i) => n + (must(c, i) ? oneLine(c, i) : 0), 0) > budget;
+    const natural = cols.map((c, i) => (squeeze && c.minW ? Math.min(c.minW, measured[i]) : oneLine(c, i)));
     const order = cols
       .map((c, i) => ({ c, i, r: must(c, i) ? -1 : (c.priority ?? i) }))
       .filter(({ c }) => forced[c.key] !== false)
       .sort((a, b) => a.r - b.r);
     const out = new Set<string>();
-    const budget = avail - 24; // first/last-column edge padding shifts when columns drop
     let used = 0;
     let full = false;
     for (const { c, i, r } of order) {
@@ -99,11 +111,14 @@ function useFitColumns(cols: Col[], keep: string | undefined, forced: Record<str
       out.add(c.key);
       used += natural[i];
     }
-    return out;
-  }, [natural, avail, cols, keep, forced]);
+    return { visible: out, squeeze };
+  }, [measured, avail, cols, keep, forced]);
 
-  return { wrap, visible };
+  return { wrap, visible, squeeze, ready: measured !== null && avail !== null };
 }
+
+/** Before the browser has measured (SSR, first paint), hide optional columns on phones so nothing is clipped. */
+const PRE_FIT_HIDE = "max-sm:hidden [[data-measuring]_&]:table-cell";
 
 /**
  * With `path`, headers are server-side sort links; otherwise they sort in the browser.
@@ -120,7 +135,10 @@ export function DataTable({ cols, rows, sort, path, params, empty }: {
   const [local, setLocal] = useState<Sort | null>(null);
   const [forced, setForced] = useState<Record<string, boolean>>({});
   const active = path ? sort : local ?? undefined;
-  const { wrap, visible } = useFitColumns(cols, active?.key, forced);
+  const { wrap, visible, squeeze, ready } = useFitColumns(cols, active?.key, forced);
+  const preFit = (c: Col) => !ready && (isPinned(c, cols.indexOf(c))
+    ? c.minW && "max-sm:whitespace-normal [[data-measuring]_&]:whitespace-nowrap"
+    : PRE_FIT_HIDE);
   const value = (c: Col, r: Row) => (c.sortBy ? c.sortBy(r) : r[c.key]);
   const canSort = (c: Col) => !path && !c.noSort && (!!c.sortBy || rows.some((r) => !blank(r[c.key])));
   const sorted = useMemo(() => {
@@ -164,7 +182,7 @@ export function DataTable({ cols, rows, sort, path, params, empty }: {
                 );
               }
               return (
-                <TableHead key={c.key} className={cn(c.num && "text-right", c.className)}
+                <TableHead key={c.key} className={cn(c.num && "text-right", c.className, preFit(c))}
                   aria-sort={on ? (active?.dir === "desc" ? "descending" : "ascending") : undefined}>
                   {label}
                 </TableHead>
@@ -176,7 +194,8 @@ export function DataTable({ cols, rows, sort, path, params, empty }: {
           {sorted.map((r, i) => (
             <TableRow key={i}>
               {shown.map((c) => (
-                <TableCell key={c.key} className={cn(c.num && "text-right font-mono tabular-nums", c.minW && "whitespace-normal", c.className)}>
+                <TableCell key={c.key} className={cn(c.num && "text-right font-mono tabular-nums",
+                  (c.prose || (c.minW && squeeze)) && "whitespace-normal [[data-measuring]_&]:whitespace-nowrap", c.className, preFit(c))}>
                   {c.render ? c.render(r) : c.fmt ? fmt(r[c.key], c.fmt) : (r[c.key] ?? "–")}
                 </TableCell>
               ))}

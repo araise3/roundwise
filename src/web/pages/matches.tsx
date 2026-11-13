@@ -6,7 +6,7 @@ import { CompareTable, mapNotes, RoundStrip, ScoreFlow } from "@/components/char
 import {
   DataTable, Empty, PageHeader, PlayerLink, Section, Swatch, TeamBadge, TeamLink, type Col,
 } from "@/components/site";
-import { date, title } from "@/lib/format";
+import { date, eventName, title } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const TM = byKey(TEAM_METRICS);
@@ -55,11 +55,13 @@ const SERIES_COLS: Col[] = [
     ) },
   { key: "maps", label: "Maps", priority: 4, noSort: true, render: (s) => <span className="text-muted-foreground">{mapScores(s)}</span> },
   { key: "tournament", label: "Event", priority: 5,
-    render: (s) => <span className="block max-w-[18rem] truncate text-muted-foreground" title={s.tournament}>{s.tournament}</span> },
+    render: (s) => <span className="block max-w-[16rem] truncate text-muted-foreground" title={s.tournament}>{eventName(s.tournament)}</span> },
 ];
 
-export function SeriesTable({ rows }: { rows: Row[] }) {
-  return <DataTable cols={SERIES_COLS} rows={rows} empty="No matches imported yet. The importer runs every minute." />;
+/** `compact` (home page) leaves out the event column. */
+export function SeriesTable({ rows, compact }: { rows: Row[]; compact?: boolean }) {
+  const cols = compact ? SERIES_COLS.filter((c) => c.key !== "tournament") : SERIES_COLS;
+  return <DataTable cols={cols} rows={rows} empty="No matches imported yet. The importer runs every minute." />;
 }
 
 const COMPARE = [
@@ -102,7 +104,7 @@ export function SeriesDetail({ data }: { data: { series: Row; games: Row[] } }) 
   return (
     <>
       <PageHeader
-        crumbs={[["Matches", "/matches"], s.tournament ?? "Match"]}
+        crumbs={[["Matches", "/matches"], s.tournament ? eventName(s.tournament) : "Match"]}
         title={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className={cn("inline-flex items-center gap-2", !t1 && "text-muted-foreground")}>
@@ -131,7 +133,7 @@ export function SeriesDetail({ data }: { data: { series: Row; games: Row[] } }) 
           const notes = [`${names[ta?.team_id]} start ${ta?.start_side ?? "?"}`, ...mapNotes(g.rounds, names)];
           return (
             <section key={g.seq} className="space-y-4">
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_440px]">
+              <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_440px]">
                 <Section title={`Map ${g.seq} · ${title(g.map)}`}
                   action={<span className="font-mono text-sm tabular-nums"><span className="inline-flex items-center gap-1.5"><Swatch side="a" />{ta?.score ?? "?"}</span> – <span className="inline-flex items-center gap-1.5">{tb?.score ?? "?"}<Swatch side="b" /></span>{g.overtime ? " · OT" : ""}</span>}>
                   <RoundStrip rounds={g.rounds} teamA={teamA} names={names} />
@@ -139,7 +141,7 @@ export function SeriesDetail({ data }: { data: { series: Row; games: Row[] } }) 
                   <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">{notes.map((n) => <li key={n}>{n}</li>)}</ul>
                 </Section>
                 {ta && tb && (
-                  <Section title="Team comparison" flush>
+                  <Section title="Team comparison" description={`${names[ta.team_id]} vs ${names[tb.team_id]}`} flush>
                     <CompareTable a={names[ta.team_id]} b={names[tb.team_id]} rows={[
                       ...COMPARE.map((m) => ({ label: m.label, a: ta[m.key], b: tb[m.key], f: m.fmt, desc: m.desc })),
                       { label: "Biggest lead", a: ta.max_lead, b: tb.max_lead, f: "int" as const },

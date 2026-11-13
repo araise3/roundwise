@@ -5,7 +5,7 @@ import type { Row } from "../../stats/queries";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fmt, WIN_TYPE } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { flushTable, Hint, Section, Swatch } from "./site";
+import { flushTable, Hint, Section, TeamBadge } from "./site";
 
 /** Colours for how a round ended. */
 export const WT = {
@@ -47,18 +47,24 @@ export function StackedBar({ label, segments, total }: { label: string; segments
   );
 }
 
-/** Horizontal bar list (e.g. weapon mix). */
+/**
+ * Horizontal bar list (e.g. weapon mix). Rows share one grid (subgrid), so labels, values and
+ * sub-values line up in columns and never wrap. Give either every item a `sub` or none.
+ */
 export function BarList({ items, max }: { items: { label: string; value: number; sub?: string }[]; max?: number }) {
   const m = max ?? Math.max(1, ...items.map((i) => i.value));
+  const hasSub = items.some((i) => i.sub != null);
   return (
-    <ul className="space-y-2 text-sm">
+    <ul className={cn("grid items-center gap-x-3 gap-y-2 text-sm",
+      hasSub ? "grid-cols-[fit-content(8rem)_minmax(2rem,1fr)_auto_auto]" : "grid-cols-[fit-content(8rem)_minmax(2rem,1fr)_auto]")}>
       {items.map((i) => (
-        <li key={i.label} className="grid grid-cols-[7rem_1fr_6rem] items-center gap-3">
-          <span className="truncate text-muted-foreground">{i.label}</span>
+        <li key={i.label} className={cn("col-span-full grid grid-cols-subgrid items-center")}>
+          <span className="truncate text-muted-foreground" title={i.label}>{i.label}</span>
           <span className="h-2 overflow-hidden rounded-full bg-muted">
             <span className="block h-full rounded-full bg-primary" style={{ width: `${(100 * i.value) / m}%` }} />
           </span>
-          <span className="text-right font-mono tabular-nums">{i.value}{i.sub && <span className="text-muted-foreground"> {i.sub}</span>}</span>
+          <span className="text-right font-mono tabular-nums whitespace-nowrap">{i.value}</span>
+          {hasSub && <span className="text-right font-mono text-xs tabular-nums whitespace-nowrap text-muted-foreground">{i.sub ?? ""}</span>}
         </li>
       ))}
     </ul>
@@ -67,16 +73,19 @@ export function BarList({ items, max }: { items: { label: string; value: number;
 
 export interface CmpRow { label: string; a: unknown; b: unknown; f: Metric["fmt"]; desc?: string }
 
-/** Two-team comparison: metric | A | split bar | B. */
-export function CompareTable({ a, b, rows }: { a: ReactNode; b: ReactNode; rows: CmpRow[] }) {
+/**
+ * Two-team comparison: metric | A | split bar | B. Headers show the teams' initials badges (full names in the
+ * tooltip) so the value columns stay narrow; put the full names in the surrounding Section's description.
+ */
+export function CompareTable({ a, b, rows }: { a: string; b: string; rows: CmpRow[] }) {
   return (
     <Table className={cn("[&_td]:px-1.5 [&_th]:px-1.5 sm:[&_td]:px-2 sm:[&_th]:px-2", flushTable)}>
       <TableHeader>
         <TableRow>
           <TableHead>Metric</TableHead>
-          <TableHead className="text-right whitespace-normal"><span className="inline-flex items-center gap-1.5"><Swatch side="a" />{a}</span></TableHead>
-          <TableHead className="hidden w-[35%] sm:table-cell" />
-          <TableHead className="whitespace-normal"><span className="inline-flex items-center gap-1.5"><Swatch side="b" />{b}</span></TableHead>
+          <TableHead className="text-right" title={a}><TeamBadge name={a} side="a" /><span className="sr-only">{a}</span></TableHead>
+          <TableHead className="hidden w-full min-w-12 sm:table-cell" />
+          <TableHead title={b}><TeamBadge name={b} side="b" /><span className="sr-only">{b}</span></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -86,7 +95,7 @@ export function CompareTable({ a, b, rows }: { a: ReactNode; b: ReactNode; rows:
           const share = na + nb > 0 ? (100 * na) / (na + nb) : 50;
           return (
             <TableRow key={r.label}>
-              <TableCell className="whitespace-normal text-muted-foreground"><Hint text={r.desc}>{r.label}</Hint></TableCell>
+              <TableCell className="whitespace-normal text-muted-foreground sm:whitespace-nowrap"><Hint text={r.desc}>{r.label}</Hint></TableCell>
               <TableCell className={cn("text-right font-mono tabular-nums", na > nb ? "font-semibold" : "text-muted-foreground")}>{fmt(r.a, r.f)}</TableCell>
               <TableCell className="hidden sm:table-cell">
                 <div className="flex h-1.5 overflow-hidden rounded-full">

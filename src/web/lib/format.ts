@@ -16,6 +16,21 @@ const SPECIAL: Record<string, string> = { kayo: "KAY/O", "kay/o": "KAY/O" };
 export const title = (s: string | null | undefined) =>
   !s ? "–" : SPECIAL[s.toLowerCase()] ?? s.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
+/**
+ * Tidy GRID tournament names: "Champions - Champions Shanghai (Playoffs: Playoffs)" → "Champions Shanghai · Playoffs",
+ * "VCT EMEA - Stage 1 2026 (Regular Season: Group Alpha)" → "VCT EMEA Stage 1 2026 · Group Alpha".
+ */
+export function eventName(raw: string | null | undefined): string {
+  if (!raw) return "–";
+  const m = raw.match(/^(.*?)(?: \(([^():]*)(?:: ([^()]*))?\))?$/);
+  const [, base = raw, stage, group] = m ?? [];
+  const [circuit, event] = base.split(" - ", 2);
+  const lastWord = circuit.split(" ").pop() ?? "";
+  const name = !event ? circuit : event.startsWith(lastWord) ? event : `${circuit} ${event}`;
+  const part = group && group !== stage ? group : stage;
+  return part ? `${name} · ${part}` : name;
+}
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** "13 Nov 2026" in UTC. Hand-rolled so server and browser render identical text (hydration). */

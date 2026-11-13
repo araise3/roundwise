@@ -71,9 +71,30 @@ leaderboard sort, and the About page's definitions. To add one:
 - No betting, odds, fantasy, or prediction-market features or links; no paywalls.
 - Data the Open Access tier does not provide (economy, trades, clutches, kill timelines, heatmaps, live data) cannot be added.
 
-## D1 limits
+## UI rules (no layout quirks)
 
-Each imported series writes ~100 rows; the free tier allows 100k rows written/day. `BATCH_SIZE` in `wrangler.jsonc` is tuned for that. Keep new per-round or per-player writes cheap.
+Every page must look tidy at 375, 768, 1280 and 1600 px wide, in light and dark mode:
+
+- Numbers, table headers, team/player names and labels in compact UI never wrap onto a second line on tablet/desktop.
+  On phones a long team name may wrap only as a last resort (DataTable `minW` columns do this automatically).
+- Rows in the same list or table show the same set of values: in `BarList`, give every item a `sub` or none.
+- Values that belong together line up in columns (`BarList` uses subgrid; tables right-align numbers with `tabular-nums`).
+- Nothing scrolls sideways, spills out of its card, or is clipped before hydration (DataTable hides optional
+  columns on phones until it has measured what fits).
+- Show tournament names through `eventName()` ("Champions Shanghai · Playoffs"), never the raw GRID string.
+- In two-team comparisons (`CompareTable`) the headers are initials badges; put full team names in the Section description.
+
+Before finishing a UI change, paste `scripts/layout-audit.js` into the browser console on the running site and run
+`await layoutAudit([...pages], [375, 768, 1280, 1600])` (and once with `{ noJs: true }` at 375). It must report `ok`
+for every page, apart from long team names wrapping at 375. For realistic data locally, copy the live database:
+`wrangler d1 export roundwise --remote --output snap.sql`, then `wrangler d1 execute roundwise --local --persist-to <dir> --file snap.sql`
+and run `wrangler dev --persist-to <dir>`.
+
+## D1 and GRID limits
+
+The account is on the Workers Paid plan (50M D1 rows written/month, 1000 subrequests per run). Each imported series
+writes ~100 rows. GRID Open Access allows 120 requests per series per hour and ~180 Series State requests/min overall;
+the importer fetches 8 series at a time and stops a run on a 429.
 
 ## Windows note
 
