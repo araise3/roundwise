@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "roundwise",
+  "main": "src/index.tsx",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true },
+  "workers_dev": true,
+  "preview_urls": false,
+
+  "vars": {
+    // Shown in the header and in the required "not endorsed" notice. Rename freely
+    // (but not to anything containing "GRID" or "Riot Open Access" - ToS 9.4).
+    "SITE_NAME": "Roundwise",
+    // Earliest match date to import. Earlier = more history, more D1 writes.
+    "BACKFILL_FROM": "2025-01-01T00:00:00Z",
+    // Series fetched from the Series State API per 10-minute cron run.
+    // ~100 D1 rows are written per series; D1 free tier allows 100k rows written/day.
+    "BATCH_SIZE": "6",
+    // Open Access data is delayed; don't ask for a series until this long after its scheduled start.
+    "DELAY_HOURS": "4",
+    // Rebuild leaderboard / map aggregates at most this often (they scan all stored maps).
+    "AGG_EVERY_HOURS": "6"
+  },
+
+  // Builds public/app.css + public/js (UI SDK client) before dev/deploy and on changes under src/.
+  "build": { "command": "npm run build", "watch_dir": "src" },
+
+  // Static files (CSS, fonts, GRID logo for the required attribution).
+  "assets": { "directory": "./public" },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "roundwise",
+      "database_id": "496a538c-2599-42eb-b4ad-7088b5ebc2b8",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "triggers": {
+    // every 10 min: discover new series, ingest a batch, rebuild aggregates when stale
+    "crons": ["*/10 * * * *"]
+  }
+}

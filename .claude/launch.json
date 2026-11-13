@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "roundwise", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 8787 },
+    { "name": "roundwise-ui", "runtimeExecutable": "npx", "runtimeArgs": ["wrangler", "dev", "--port", "8790", "--inspector-port", "9239"], "port": 8790 }
+  ]
+}

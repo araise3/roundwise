@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+*.log
+public/app.css
+public/fonts/
+public/js/
+.legacy-ui/
