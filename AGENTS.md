@@ -83,7 +83,8 @@ leaderboard sort, and the About page's definitions. To add one:
 - `SITE_NAME` must not contain or resemble "GRID" or "Riot Open Access".
 - No Riot art; agents and maps are text only. Team logos are shown by the owner's decision although ToS 9.3 grants no
   rights to team marks. Sources: Liquipedia light/dark icons (`src/ingest/liquipedia.ts`; User-Agent with the
-  `LIQUIPEDIA_CONTACT` secret, ≥2 s between requests, one cron run at a time via the `logo_lock` meta row), falling back
+  `LIQUIPEDIA_CONTACT` secret, ≥2 s between requests, one cron run at a time via the `logo_lock` meta row, exponential
+  backoff 2→30 min after a 429; credited in the footer as CC BY-SA), falling back
   to GRID's `Team.logoUrl`. Processed by `src/ingest/logos.ts`, stored in D1, never hotlinked.
 - No betting, odds, fantasy, or prediction-market features or links; no paywalls.
 - GRID's Open Access tier has no economy, trades, clutches, kill timelines, heatmaps or live data. For VCT matches,

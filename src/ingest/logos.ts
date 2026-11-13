@@ -18,7 +18,23 @@ export const TILE_ON_DARK = "#f5f5f5";  // light tile behind dark logos in dark 
 const ANALYSE = 48;   // px used to measure contrast
 const RECHECK = 30 * DAY; // teams on the GRID fallback (or with no logo) are looked up on Liquipedia again
 const LOCK_MS = 3 * 60_000;
-const BACKOFF_MS = 15 * 60_000; // pause after a Liquipedia 429
+const BACKOFF_MIN_MS = 2 * 60_000;  // first pause after a Liquipedia 429
+const BACKOFF_MAX_MS = 30 * 60_000;
+
+interface Backoff { until: string; n: number }
+
+/** meta.liquipedia_backoff: JSON {until, n}; older rows hold a bare ISO timestamp. */
+export function parseBackoff(v: string | null | undefined): Backoff | null {
+  if (!v) return null;
+  try { return JSON.parse(v) as Backoff; } catch { return { until: v, n: 1 }; }
+}
+
+/** 2 min after the first 429, doubling on each further 429 (up to 30 min). */
+export function nextBackoff(prev: Backoff | null, now: Date): Backoff {
+  const n = (prev?.n ?? 0) + 1;
+  const ms = Math.min(BACKOFF_MIN_MS * 2 ** (n - 1), BACKOFF_MAX_MS);
+  return { until: new Date(now.getTime() + ms).toISOString(), n };
+}
 
 const lin = (c: number) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
 const luminance = (r: number, g: number, b: number) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
@@ -89,12 +105,12 @@ export async function refreshLogos(env: Env, now: Date): Promise<number> {
   const db = env.DB;
   const contact = (env as { LIQUIPEDIA_CONTACT?: string }).LIQUIPEDIA_CONTACT;
   const lp = contact ? new LiquipediaClient(contact) : null;
-  if (lp) {
-    // After a Liquipedia 429, pause all logo work (not just Liquipedia) so teams don't fall back to GRID meanwhile.
-    const until = await db.prepare("SELECT value FROM meta WHERE key = 'liquipedia_backoff'").first<{ value: string }>();
-    if (until && until.value > now.toISOString()) return 0;
-  }
+  // After a Liquipedia 429, pause all logo work (not just Liquipedia) so teams don't fall back to GRID meanwhile.
+  // Liquipedia documents no wait time, so back off exponentially: 2, 4, 8, 16, 30 min; reset after a clean run.
+  const backoff = lp ? parseBackoff((await db.prepare("SELECT value FROM meta WHERE key = 'liquipedia_backoff'").first<{ value: string }>())?.value) : null;
+  if (backoff && backoff.until > now.toISOString()) return 0;
   let locked = false;
+  let rateLimited = false;
   try {
     if (!(locked = await lock(db, now))) return 0;
     const due = await db.prepare(
@@ -145,9 +161,11 @@ export async function refreshLogos(env: Env, now: Date): Promise<number> {
         done++;
       } catch (e) {
         if (e instanceof LiquipediaRateLimited) {
-          console.warn("logos: Liquipedia rate limit, pausing logo work for 15 min");
+          const next = nextBackoff(backoff, now);
+          console.warn(`logos: Liquipedia rate limit, pausing logo work until ${next.until}`);
           await db.prepare("INSERT INTO meta (key, value) VALUES ('liquipedia_backoff', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-            .bind(new Date(now.getTime() + BACKOFF_MS).toISOString()).run();
+            .bind(JSON.stringify(next)).run();
+          rateLimited = true;
           break;
         }
         console.warn("logo", id, String(e));
@@ -155,6 +173,7 @@ export async function refreshLogos(env: Env, now: Date): Promise<number> {
         await db.prepare("UPDATE teams SET logo_status = 'error', logo_checked_at = ? WHERE id = ?").bind(nowIso, id).run();
       }
     }
+    if (backoff && !rateLimited) await db.prepare("DELETE FROM meta WHERE key = 'liquipedia_backoff'").run();
     return done;
   } catch (e) {
     console.warn("refreshLogos", String(e));

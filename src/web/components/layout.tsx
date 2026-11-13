@@ -85,6 +85,10 @@ function Attribution({ siteName }: { siteName: string }) {
             {siteName} was created under Riot Games' "Legal Jibber Jabber" policy using assets owned by Riot Games.
             Riot Games does not endorse or sponsor this project.
           </p>
+          <p>
+            Team logos via <a className="underline underline-offset-2 hover:text-foreground" href="https://liquipedia.net/valorant">Liquipedia</a> (CC BY-SA 3.0)
+            and GRID; they are trademarks of their teams.
+          </p>
           <p>Data is delayed and may contain errors or gaps. Non-commercial fan project.</p>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { logoVisibility, tilePlan } from "../src/ingest/logos";
+import { logoVisibility, nextBackoff, parseBackoff, tilePlan } from "../src/ingest/logos";
 
 /** n RGBA pixels of one colour, plus m fully transparent ones. */
 const px = (rgb: [number, number, number], n: number, m = 0) =>
@@ -26,5 +26,23 @@ describe("logo contrast", () => {
 
   it("ignores transparent pixels and handles empty images", () => {
     expect(logoVisibility(px([0, 0, 0], 0, 10))).toEqual({ onDark: 1, onLight: 1 });
+  });
+});
+
+describe("Liquipedia backoff", () => {
+  const now = new Date("2026-11-13T12:00:00Z");
+  const mins = (b: { until: string }) => (Date.parse(b.until) - now.getTime()) / 60_000;
+
+  it("starts at 2 minutes and doubles up to 30", () => {
+    let b = nextBackoff(null, now);
+    expect(mins(b)).toBe(2);
+    const seen = [2];
+    for (let i = 0; i < 5; i++) { b = nextBackoff(b, now); seen.push(mins(b)); }
+    expect(seen).toEqual([2, 4, 8, 16, 30, 30]);
+  });
+
+  it("reads old bare-timestamp rows", () => {
+    expect(parseBackoff("2026-11-13T12:15:00.000Z")).toEqual({ until: "2026-11-13T12:15:00.000Z", n: 1 });
+    expect(parseBackoff(null)).toBeNull();
   });
 });
