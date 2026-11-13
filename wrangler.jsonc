@@ -13,14 +13,14 @@
     "SITE_NAME": "Roundwise",
     // Earliest match date to import. Which tournaments are imported is set in src/ingest/scope.ts.
     "BACKFILL_FROM": "2026-01-01T00:00:00Z",
-    // Series fetched from the Series State API per 10-minute cron run.
+    // Series fetched from the Series State API per cron run (every minute), 8 at a time.
     // ~100 D1 rows are written per series. Sized for the Workers Paid plan (50M D1 rows written/month,
     // 1000 subrequests per run); on the free plan (100k rows/day, 50 subrequests) use 6.
-    "BATCH_SIZE": "40",
+    "BATCH_SIZE": "100",
     // Open Access data is delayed; don't ask for a series until this long after its scheduled start.
     "DELAY_HOURS": "4",
     // Rebuild leaderboard / map aggregates at most this often (they scan all stored maps).
-    "AGG_EVERY_HOURS": "6"
+    "AGG_EVERY_HOURS": "1"
   },
 
   // Builds public/app.css + public/js (UI SDK client) before dev/deploy and on changes under src/.
@@ -39,7 +39,7 @@
   ],
 
   "triggers": {
-    // every 10 min: discover new series, ingest a batch, rebuild aggregates when stale
-    "crons": ["*/10 * * * *"]
+    // every minute: discover new series, ingest a batch, rebuild aggregates when stale
+    "crons": ["* * * * *"]
   }
 }

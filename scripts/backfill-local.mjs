@@ -3,7 +3,7 @@
 // Prints only the run counters, never match data.
 const runs = Number(process.argv[2] ?? 20);
 const port = Number(process.argv[3] ?? 8787);
-const url = `http://127.0.0.1:${port}/__scheduled?cron=${encodeURIComponent("*/10 * * * *")}`;
+const url = `http://127.0.0.1:${port}/__scheduled?cron=${encodeURIComponent("* * * * *")}`;
 
 for (let i = 1; i <= runs; i++) {
   const res = await fetch(url);

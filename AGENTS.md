@@ -5,7 +5,7 @@ Guidance for AI coding agents working in this repository. See `README.md` for th
 ## Project
 
 Roundwise: round-level VALORANT esports analytics built on GRID Riot Open Access data.
-A single Cloudflare Worker (Hono + React 19 SSR) backed by D1, with a 10-minute cron that imports matches.
+A single Cloudflare Worker (Hono + React 19 SSR) backed by D1, with a cron that imports matches every minute.
 
 ## Commands
 

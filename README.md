@@ -1,7 +1,7 @@
 # Roundwise
 
 Round-level VALORANT esports analytics on GRID Riot Open Access data, covering tier 1 (VCT) and tier 2 (VCL / Challengers) from 2026.
-Cloudflare Worker (Hono + React SSR) + D1 + a 10-minute cron importer.
+Cloudflare Worker (Hono + React SSR) + D1 + a cron importer that runs every minute.
 
 It focuses on what scoreboard sites don't show:
 
@@ -58,8 +58,9 @@ The cron starts importing immediately. Tuning lives in `wrangler.jsonc` → `var
 
 - `BACKFILL_FROM`: earliest match date to import. Which tournaments are imported (VCT, Masters, Champions, LCQs,
   Challengers/VCL; not Game Changers or open qualifiers) is defined in `src/ingest/scope.ts`.
-- `BATCH_SIZE`: matches fetched per 10-minute run. Each match writes ~100 D1 rows. The default (40 → up to
-  ~5,700 matches/day) assumes the Workers Paid plan. On the free plan use 6: D1 free allows 100k rows written/day
+- `BATCH_SIZE`: matches fetched per run (every minute, 8 in parallel). Each match writes ~100 D1 rows. The default (100) assumes
+  the Workers Paid plan; throughput is then capped by GRID (~180 Series State requests/min overall, 120/series/hour). On the free plan use 6 and a
+  `*/10` cron: D1 free allows 100k rows written/day
   and a Worker run only 50 subrequests. GRID rate limits are handled: a 429 ends the batch and the next run resumes.
 - `DELAY_HOURS`: Open Access data is delayed; matches are requested this long after their start.
 - `AGG_EVERY_HOURS`: how often leaderboard/map aggregates are rebuilt.

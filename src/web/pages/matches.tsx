@@ -59,7 +59,7 @@ const SERIES_COLS: Col[] = [
 ];
 
 export function SeriesTable({ rows }: { rows: Row[] }) {
-  return <DataTable cols={SERIES_COLS} rows={rows} empty="No matches imported yet. The importer runs every 10 minutes." />;
+  return <DataTable cols={SERIES_COLS} rows={rows} empty="No matches imported yet. The importer runs every minute." />;
 }
 
 const COMPARE = [

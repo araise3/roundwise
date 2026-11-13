@@ -107,47 +107,73 @@ async function discover(env: Env, now: Date): Promise<number> {
 
 interface DueSeries { id: string; start_time: string; attempts: number }
 
+// Series State requests in flight at once. Open Access limits: 120 requests per series per hour (GRID portal;
+// we fetch each series once, retries are 30+ min apart) and ~180/min overall (GRID help center). A 429 ends the run.
+const CONCURRENCY = 8;
+// Due series are leased so an overlapping cron run (every minute) doesn't fetch them twice.
+const LEASE_MS = 5 * 60_000;
+
 async function processBatch(env: Env, now: Date, report: IngestReport) {
   const delay = Number(env.DELAY_HOURS || "4") * HOUR;
   const batch = Number(env.BATCH_SIZE || "6");
   const nowIso = now.toISOString();
   const due = await env.DB.prepare(
-    `SELECT id, start_time, attempts FROM series
-     WHERE status = 'pending' AND start_time <= ? AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-     ORDER BY start_time DESC LIMIT ?`,
-  ).bind(new Date(now.getTime() - delay).toISOString(), nowIso, batch).all<DueSeries>();
+    `UPDATE series SET next_attempt_at = ?
+     WHERE id IN (
+       SELECT id FROM series
+       WHERE status = 'pending' AND start_time <= ? AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+       ORDER BY start_time DESC LIMIT ?)
+     RETURNING id, start_time, attempts`,
+  ).bind(new Date(now.getTime() + LEASE_MS).toISOString(), new Date(now.getTime() - delay).toISOString(), nowIso, batch)
+    .all<DueSeries>();
 
-  for (const s of due.results) {
-    report.processed++;
-    try {
-      const data = await gridQuery<SeriesStateData>(SERIES_STATE_URL, env.GRID_API_KEY, SERIES_STATE, { id: s.id });
-      const state = data.seriesState;
-      const age = now.getTime() - Date.parse(s.start_time);
-
-      if (!state || !state.finished) {
-        if ((!state || !state.started) && age > 3 * DAY) {
-          await markSkipped(env.DB, s.id, "never started / no state"); report.skipped++;
-        } else if (s.attempts >= 10) {
-          await markSkipped(env.DB, s.id, "not finished after retries"); report.skipped++;
-        } else {
-          await retryLater(env.DB, s, now, "not finished yet"); report.retried++;
-        }
-        continue;
+  const queue = [...due.results].sort((a, b) => b.start_time.localeCompare(a.start_time));
+  let rateLimited: RateLimitedError | null = null;
+  const worker = async () => {
+    for (let s = queue.shift(); s && !rateLimited; s = queue.shift()) {
+      try {
+        await processOne(env, now, nowIso, s, report);
+      } catch (e) {
+        if (e instanceof RateLimitedError) rateLimited = e;
+        else throw e;
       }
-
-      const t = transformSeries(state, s.start_time);
-      if (t.games.length === 0) {
-        await markSkipped(env.DB, s.id, "finished but no round data"); report.skipped++;
-        continue;
-      }
-      await storeSeries(env.DB, s.id, t, nowIso);
-      report.stored++;
-    } catch (e) {
-      if (e instanceof RateLimitedError) throw e;
-      const msg = e instanceof GridError ? e.message : String(e);
-      if (s.attempts >= 3) { await markSkipped(env.DB, s.id, msg.slice(0, 300)); report.skipped++; }
-      else { await retryLater(env.DB, s, now, msg.slice(0, 300)); report.retried++; }
     }
+  };
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  // Series left in the queue keep their lease and are retried once it expires.
+  if (rateLimited) throw rateLimited;
+}
+
+async function processOne(env: Env, now: Date, nowIso: string, s: DueSeries, report: IngestReport) {
+  report.processed++;
+  try {
+    const data = await gridQuery<SeriesStateData>(SERIES_STATE_URL, env.GRID_API_KEY, SERIES_STATE, { id: s.id });
+    const state = data.seriesState;
+    const age = now.getTime() - Date.parse(s.start_time);
+
+    if (!state || !state.finished) {
+      if ((!state || !state.started) && age > 3 * DAY) {
+        await markSkipped(env.DB, s.id, "never started / no state"); report.skipped++;
+      } else if (s.attempts >= 10) {
+        await markSkipped(env.DB, s.id, "not finished after retries"); report.skipped++;
+      } else {
+        await retryLater(env.DB, s, now, "not finished yet"); report.retried++;
+      }
+      return;
+    }
+
+    const t = transformSeries(state, s.start_time);
+    if (t.games.length === 0) {
+      await markSkipped(env.DB, s.id, "finished but no round data"); report.skipped++;
+      return;
+    }
+    await storeSeries(env.DB, s.id, t, nowIso);
+    report.stored++;
+  } catch (e) {
+    if (e instanceof RateLimitedError) { report.processed--; throw e; }
+    const msg = e instanceof GridError ? e.message : String(e);
+    if (s.attempts >= 3) { await markSkipped(env.DB, s.id, msg.slice(0, 300)); report.skipped++; }
+    else { await retryLater(env.DB, s, now, msg.slice(0, 300)); report.retried++; }
   }
 }
 
